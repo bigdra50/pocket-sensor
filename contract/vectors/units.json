@@ -1,0 +1,167 @@
+{
+  "accel_g_to_mps2": [
+    {
+      "input": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "output": [
+        0.0,
+        0.0,
+        9.80665
+      ]
+    },
+    {
+      "input": [
+        1.0,
+        -0.5,
+        0.25
+      ],
+      "output": [
+        -9.80665,
+        4.903325,
+        -2.4516625
+      ]
+    }
+  ],
+  "accuracy_to_variance": [
+    {
+      "input": 1.5,
+      "output": 2.25
+    },
+    {
+      "input": 0.0,
+      "output": 0.0
+    }
+  ],
+  "course_deg_to_enu_yaw": [
+    {
+      "input": 0.0,
+      "output": 1.5707963267948966
+    },
+    {
+      "input": 90.0,
+      "output": 0.0
+    },
+    {
+      "input": 180.0,
+      "output": -1.5707963267948966
+    },
+    {
+      "input": 270.0,
+      "output": 3.141592653589793
+    },
+    {
+      "input": 360.0,
+      "output": 1.5707963267948966
+    }
+  ],
+  "depth_m_to_mm_u16": [
+    {
+      "input": [
+        "NaN",
+        0.0,
+        -1.0,
+        0.0004,
+        0.0005,
+        1.2345,
+        65.5344,
+        65.535,
+        100.0,
+        "Infinity"
+      ],
+      "output": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1235,
+        65534,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "mag_ut_to_tesla": [
+    {
+      "input": [
+        30.0,
+        -15.0,
+        45.0
+      ],
+      "output": [
+        2.9999999999999997e-05,
+        -1.4999999999999999e-05,
+        4.4999999999999996e-05
+      ]
+    }
+  ],
+  "navsat_covariance": [
+    {
+      "horizontal_accuracy_m": -1.0,
+      "output": {
+        "cov9": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "cov_type": 0,
+        "status": -1
+      },
+      "vertical_accuracy_m": 2.0
+    },
+    {
+      "horizontal_accuracy_m": 2.0,
+      "output": {
+        "cov9": [
+          4.0,
+          0.0,
+          0.0,
+          0.0,
+          4.0,
+          0.0,
+          0.0,
+          0.0,
+          16.0
+        ],
+        "cov_type": 1,
+        "status": 0
+      },
+      "vertical_accuracy_m": 4.0
+    },
+    {
+      "horizontal_accuracy_m": 3.0,
+      "output": {
+        "cov9": [
+          9.0,
+          0.0,
+          0.0,
+          0.0,
+          9.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "cov_type": 1,
+        "status": 0
+      },
+      "vertical_accuracy_m": -1.0
+    }
+  ],
+  "pressure_kpa_to_pa": [
+    {
+      "input": 101.325,
+      "output": 101325.0
+    }
+  ]
+}
