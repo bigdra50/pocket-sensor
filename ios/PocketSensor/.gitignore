@@ -3,5 +3,7 @@ Sources/Info.plist
 *.xcworkspace/
 xcuserdata/
 DerivedData/
+# 署名なしのビルドは、署名付きの DerivedData/ と混ざらないように別の場所へ出す
+DerivedData-*/
 build/
 Local.xcconfig

@@ -96,6 +96,7 @@ uv、Swift、XcodeGen は、PATH にあるものを使う。
 | `mise run test` | 生成物が `contract/` と一致するかの検査と、Python、Swift、E2E のテストをまとめて走らせる |
 | `mise run test:python` | Python SDK のテスト（E2E を除く） |
 | `mise run test:swift` | Swift パッケージのテスト（macOS の上で走る） |
+| `mise run test:ios` | iOS アプリの単体テストをシミュレーターで走らせる（署名は要らない） |
 | `mise run test:e2e` | Swift の擬似デバイスと Python SDK を通しで確かめる |
 | `mise run test:foxglove-client` | Lichtblick と同じクライアントと復号器でサーバーを確かめる（node が要る） |
 | `mise run lint:python` | ruff の検査 |

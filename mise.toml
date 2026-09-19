@@ -26,6 +26,16 @@ description = "Swift パッケージのテスト（macOS の上で走る）"
 dir = "{{config_root}}/ios/PocketSensorKit"
 run = "swift test"
 
+[tasks."test:ios"]
+description = "iOS アプリの単体テストをシミュレーターで走らせる（署名は要らない）。機種は POCKETSENSOR_SIMULATOR で変える"
+dir = "{{config_root}}/ios/PocketSensor"
+run = [
+  "xcodegen generate",
+  """xcodebuild test -project PocketSensor.xcodeproj -scheme PocketSensor \
+    -destination "platform=iOS Simulator,name=${POCKETSENSOR_SIMULATOR:-iPhone 17 Pro}" \
+    -derivedDataPath DerivedData-unsigned CODE_SIGNING_ALLOWED=NO -quiet""",
+]
+
 [tasks."build:sim"]
 description = "Swift の擬似デバイス pocketsensor-sim をビルドする"
 dir = "{{config_root}}/ios/PocketSensorKit"
