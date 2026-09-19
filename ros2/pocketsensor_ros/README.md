@@ -35,10 +35,25 @@ USB でつなぐときは `source:=usb:` を渡す。
 | `streams` | 文字列の配列 | 空 | 流すストリーム。空なら、端末が広告したチャンネルをすべて流す |
 | `publish_tf` | 真偽値 | true | false なら、端末の姿勢の `/tf` と `/tf_static` を出さない。参照画像の anchor は出す（下の URDF の節を参照） |
 | `reconnect_period` | 実数（秒） | 2.0 | つながらないときと切れたときに、接続し直す間隔 |
+| `depth_transport` | 文字列 | `compressed` | 深度と confidence をどの形で受け取るか。`compressed`（PNG）、`raw`（無圧縮）、`both` |
 
 `streams` には `color`、`depth`、`pose`、`imu`、`imu_raw`、`mag`、`pressure`、`gnss`、`battery` を書ける。
 絞り込んだときも、`/tf_static`、`device_info`、`/diagnostics` は流す。
 較正と端末の情報が無いと、受け取ったデータを ROS 側で使えないためである。
+
+### 深度の受け取り方
+
+端末は深度と confidence を、無圧縮と PNG の可逆圧縮の 2 通りで広告する。
+`depth_transport` を指定しなければ、中継は PNG のほうだけを購読して `<トピック>/compressedDepth` と `<トピック>/compressed` へ流す。
+両方を購読すると、端末が同じ深度を 2 通りに符号化して送り、帯域を減らす意味が無くなるためである。
+`sensor_msgs/Image` が要るノードには、ロボットの側で `image_transport` の `republish` を挟む。
+
+```
+ros2 run image_transport republish compressedDepth raw --ros-args \
+  -r in/compressedDepth:=/pocketsensor/depth/image/compressedDepth -r out:=/pocketsensor/depth/image
+```
+
+PNG を広告しない古い端末では、`compressed` のままでも無圧縮を購読する。
 
 ### 時刻
 

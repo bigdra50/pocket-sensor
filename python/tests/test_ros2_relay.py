@@ -171,7 +171,7 @@ def test_relay_passes_bytes_through_when_rewrite_is_off(relay_module: Any, codec
 
 def test_relay_qos_follows_the_kind_of_topic(relay_module: Any) -> None:
     with FakeDevice(port=0, seed=0) as fake:
-        node = _Node(source=fake.url)
+        node = _Node(source=fake.url, depth_transport="both")
         relay = relay_module.RelayNode(node)
         try:
             _wait_until(lambda: _has(node, "/tf_static", "/pocketsensor/device_info"), timeout=5.0)
@@ -184,10 +184,39 @@ def test_relay_qos_follows_the_kind_of_topic(relay_module: Any) -> None:
     assert pubs["/pocketsensor/imu/data"].qos is _SENSOR_DATA
     assert pubs["/pocketsensor/color/image/compressed"].qos is _SENSOR_DATA
     assert pubs["/pocketsensor/depth/image"].qos is _SENSOR_DATA
+    assert pubs["/pocketsensor/depth/image/compressedDepth"].qos is _SENSOR_DATA
+    assert pubs["/pocketsensor/depth/confidence/compressed"].qos is _SENSOR_DATA
     assert pubs["/pocketsensor/odom"].qos.reliability is _Reliability.RELIABLE
     assert pubs["/pocketsensor/odom"].qos.durability is _Durability.VOLATILE
     assert pubs["/pocketsensor/imu/data"].cls == "sensor_msgs/msg/Imu"
     assert pubs["/tf"].cls == "tf2_msgs/msg/TFMessage"
+
+
+_DEPTH_RAW = {"/pocketsensor/depth/image", "/pocketsensor/depth/confidence"}
+_DEPTH_PNG = {"/pocketsensor/depth/image/compressedDepth", "/pocketsensor/depth/confidence/compressed"}
+
+
+def _depth_topics(relay_module: Any, fake: FakeDevice, **params: Any) -> set[str]:
+    node = _Node(source=fake.url, **params)
+    relay = relay_module.RelayNode(node)
+    try:
+        _wait_until(lambda: _has(node, "/pocketsensor/depth/camera_info"), timeout=5.0)
+    finally:
+        relay.destroy()
+    return set(node.publishers) & (_DEPTH_RAW | _DEPTH_PNG)
+
+
+def test_relay_asks_the_device_for_one_depth_variant_only(relay_module: Any) -> None:
+    # 両方を購読すると、端末は同じ深度を 2 通りに符号化して送る。帯域を減らすための圧縮が逆に働く。
+    with FakeDevice(port=0, seed=0) as fake:
+        assert _depth_topics(relay_module, fake) == _DEPTH_PNG
+        assert _depth_topics(relay_module, fake, depth_transport="raw") == _DEPTH_RAW
+        assert _depth_topics(relay_module, fake, depth_transport="both") == _DEPTH_RAW | _DEPTH_PNG
+
+
+def test_relay_falls_back_to_raw_depth_on_a_device_without_png(relay_module: Any) -> None:
+    with FakeDevice(port=0, seed=0, compressed_depth=False) as fake:
+        assert _depth_topics(relay_module, fake) == _DEPTH_RAW
 
 
 def test_relay_stream_filter_keeps_calibration_and_device_info(relay_module: Any) -> None:

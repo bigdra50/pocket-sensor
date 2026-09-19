@@ -37,9 +37,10 @@ _SENSOR_SCHEMAS = frozenset(
         "sensor_msgs/msg/Imu",
     }
 )
+_DEPTH_PNG_KEYS = ("depth_image_compressed", "depth_confidence_compressed")
 _STREAM_KEYS: dict[str, tuple[str, ...]] = {
     "color": Color().channel_keys(),
-    "depth": Depth().channel_keys(),
+    "depth": (*Depth().channel_keys(), *_DEPTH_PNG_KEYS),
     "pose": Pose().channel_keys(),
     "imu": Imu().channel_keys(),
     "imu_raw": Imu(raw=True).channel_keys(),
@@ -50,6 +51,9 @@ _STREAM_KEYS: dict[str, tuple[str, ...]] = {
 }
 # 較正（tf_static）と端末の情報が無いと、絞り込んだストリームを ROS 側で使えない。診断は 1 Hz で軽い。
 _ALWAYS_KEYS = frozenset({"tf_static", "device_info", "diagnostics"})
+# 深度と confidence は、無圧縮と PNG の 2 通りで広告される。無圧縮の key から PNG の key への対応。
+_DEPTH_PNG_KEY = dict(zip(("depth_image", "depth_confidence"), _DEPTH_PNG_KEYS, strict=True))
+_DEPTH_TRANSPORTS = ("compressed", "raw", "both")
 _CONNECT_TIMEOUT_S = 5.0
 # 最初の 8 回は 1 秒おきに測って推定を早く落ち着かせ、以後は 5 秒おきにする。SDK の Device と同じ刻み。
 _CLOCK_WARMUP_SAMPLES = 8
@@ -106,6 +110,19 @@ def _expand_stream_tokens(tokens: list[str]) -> set[str] | None:
     if not wanted:
         return None
     return wanted | _ALWAYS_KEYS
+
+
+def _skipped_depth_keys(transport: str, advertised: set[str]) -> set[str]:
+    """深度を 1 通りだけ購読するために、購読しない key を返す。
+
+    両方を購読すると、端末は同じ深度を 2 通りに符号化して送る。
+    compressed でも、PNG を広告しない端末では無圧縮を使う。
+    """
+    if transport == "both":
+        return set()
+    if transport == "raw":
+        return set(_DEPTH_PNG_KEY.values())
+    return {raw for raw, png in _DEPTH_PNG_KEY.items() if png in advertised}
 
 
 def _channel_key(topic: str) -> str | None:
@@ -195,6 +212,9 @@ class RelayNode:
         self._rewrite = bool(ros_node.declare_parameter("rewrite_stamp", True).value)
         self._publish_tf = bool(ros_node.declare_parameter("publish_tf", True).value)
         self._reconnect_period = float(ros_node.declare_parameter("reconnect_period", 2.0).value)
+        self._depth_transport = str(ros_node.declare_parameter("depth_transport", "compressed").value)
+        if self._depth_transport not in _DEPTH_TRANSPORTS:
+            raise ValueError(f"depth_transport must be one of {_DEPTH_TRANSPORTS}: {self._depth_transport!r}")
         # 空の配列は型が決まらず宣言できないので、空文字 1 個を「指定なし」とする。
         streams_param = ros_node.declare_parameter("streams", [""]).value
         tokens = [str(v) for v in streams_param] if streams_param is not None else []
@@ -249,8 +269,12 @@ class RelayNode:
             client.close()
 
     def _subscribe(self, client: FoxgloveClient) -> None:
+        advertised = {key for key in map(_channel_key, client.channels) if key is not None}
+        skipped = _skipped_depth_keys(self._depth_transport, advertised)
         for channel in client.channels.values():
             key = _channel_key(channel.topic)
+            if key in skipped:
+                continue
             if self._wanted_keys is not None and key not in self._wanted_keys:
                 continue
             # publish_tf が false でも /tf は購読する。anchor を、端末から見た変換へ直して出すため。
