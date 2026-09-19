@@ -6,6 +6,18 @@ public enum MagCalibration: String, Equatable, Sendable {
     case low
     case medium
     case high
+
+    /// Core Motion の `CMMagneticFieldCalibrationAccuracy.rawValue`。
+    /// -1 が未較正、0 / 1 / 2 が low / medium / high。
+    public static func fromAccuracyRaw(_ raw: Int32) -> MagCalibration {
+        switch raw {
+        case -1: return .uncalibrated
+        case 0: return .low
+        case 1: return .medium
+        case 2: return .high
+        default: return .unknown
+        }
+    }
 }
 
 public struct DiagnosticsInput: Equatable, Sendable {

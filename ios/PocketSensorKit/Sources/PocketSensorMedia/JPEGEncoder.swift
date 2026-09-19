@@ -23,9 +23,8 @@ public final class JPEGEncoder {
         context = CIContext(options: [.cacheIntermediates: false])
     }
 
-    public func encode(pixelBuffer: CVPixelBuffer, targetWidth: Int, quality: Double) -> EncodedImage? {
-        let sourceWidth = CVPixelBufferGetWidth(pixelBuffer)
-        let sourceHeight = CVPixelBufferGetHeight(pixelBuffer)
+    /// 拡大はせず、幅が奇数なら 1 画素落とす。camera_info を JPEG 無しで出すときも同じ式を使う。
+    public static func targetSize(sourceWidth: Int, sourceHeight: Int, targetWidth: Int) -> (width: Int, height: Int)? {
         guard sourceWidth > 0, sourceHeight > 0, targetWidth > 0 else { return nil }
         var width = min(targetWidth, sourceWidth)
         if width % 2 != 0 {
@@ -34,6 +33,17 @@ public final class JPEGEncoder {
         guard width > 0 else { return nil }
         let height = Int((Double(sourceHeight) * Double(width) / Double(sourceWidth)).rounded())
         guard height > 0 else { return nil }
+        return (width, height)
+    }
+
+    public func encode(pixelBuffer: CVPixelBuffer, targetWidth: Int, quality: Double) -> EncodedImage? {
+        let sourceWidth = CVPixelBufferGetWidth(pixelBuffer)
+        let sourceHeight = CVPixelBufferGetHeight(pixelBuffer)
+        guard let size = Self.targetSize(sourceWidth: sourceWidth, sourceHeight: sourceHeight, targetWidth: targetWidth) else {
+            return nil
+        }
+        let width = size.width
+        let height = size.height
 
         let image = CIImage(cvPixelBuffer: pixelBuffer)
         let scaled: CIImage

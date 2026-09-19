@@ -22,6 +22,23 @@ final class JPEGEncoderTests: XCTestCase {
         XCTAssertEqual(noUpscale.height, 48)
     }
 
+    func testTargetSizeMatchesEncodeRulesWithoutABuffer() {
+        let even = JPEGEncoder.targetSize(sourceWidth: 64, sourceHeight: 48, targetWidth: 40)
+        XCTAssertEqual(even?.width, 40)
+        XCTAssertEqual(even?.height, 30)
+
+        let odd = JPEGEncoder.targetSize(sourceWidth: 64, sourceHeight: 48, targetWidth: 41)
+        XCTAssertEqual(odd?.width, 40)
+        XCTAssertEqual(odd?.height, 30)
+
+        let noUpscale = JPEGEncoder.targetSize(sourceWidth: 64, sourceHeight: 48, targetWidth: 400)
+        XCTAssertEqual(noUpscale?.width, 64)
+        XCTAssertEqual(noUpscale?.height, 48)
+
+        XCTAssertNil(JPEGEncoder.targetSize(sourceWidth: 0, sourceHeight: 48, targetWidth: 40))
+        XCTAssertNil(JPEGEncoder.targetSize(sourceWidth: 64, sourceHeight: 48, targetWidth: 0))
+    }
+
     func test420fEncodesWithoutRotation() throws {
         let encoder = JPEGEncoder()
         let source = try XCTUnwrap(make420fBuffer(width: 32, height: 16))

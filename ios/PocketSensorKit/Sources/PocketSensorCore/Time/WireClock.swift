@@ -72,6 +72,17 @@ public enum ClockCheckStatus: String, Equatable, Sendable, Codable {
     case ok
     case suspicious
     case pending
+
+    /// 未到着は無視する。1 件でも suspicious なら suspicious。何も無ければ pending。
+    public static func reducing(_ checks: [ClockSelfCheck]) -> ClockCheckStatus {
+        if checks.isEmpty { return .pending }
+        for check in checks {
+            if case .suspicious = check {
+                return .suspicious
+            }
+        }
+        return .ok
+    }
 }
 
 enum WireStamp {
