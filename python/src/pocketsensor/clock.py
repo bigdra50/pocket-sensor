@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pocketsensor.errors import ClockNotReady
 
-class ClockNotReady(Exception):
-    """時計合わせのサンプルがまだ無く、HOST 時刻を求められない。"""
+__all__ = ["ClockEstimator", "ClockNotReady", "ClockSample", "ClockView"]
 
 
 @dataclass(frozen=True)
@@ -51,6 +51,7 @@ class ClockEstimator:
         self._samples: list[ClockSample] = []
         self._adopted: list[tuple[float, float]] = []
         self._adopted_key: tuple[int, int, int, int] | None = None
+        self._sample_count = 0
 
     def add(self, sample: ClockSample) -> None:
         if sample.t4 < sample.t1:
@@ -58,6 +59,9 @@ class ClockEstimator:
         if sample.rtt < 0:
             raise ValueError(f"negative rtt: t1={sample.t1} t2={sample.t2} t3={sample.t3} t4={sample.t4}")
         self._samples.append(sample)
+        self._sample_count += 1
+        if self._window > 0 and len(self._samples) > self._window:
+            self._samples = self._samples[-self._window :]
         best = self._best()
         assert best is not None
         key = (best.t1, best.t2, best.t3, best.t4)
@@ -72,7 +76,12 @@ class ClockEstimator:
         recent = self._samples[-self._window :] if self._window > 0 else []
         if not recent:
             return None
-        return min(recent, key=lambda s: s.rtt)
+        # rtt が同じなら、並びの後ろ＝新しいほうを採る
+        best = recent[0]
+        for sample in recent[1:]:
+            if sample.rtt <= best.rtt:
+                best = sample
+        return best
 
     @property
     def ready(self) -> bool:
@@ -80,7 +89,7 @@ class ClockEstimator:
 
     @property
     def sample_count(self) -> int:
-        return len(self._samples)
+        return self._sample_count
 
     @property
     def offset_ns(self) -> float:
@@ -112,3 +121,56 @@ class ClockEstimator:
         t_ref, offset_ref = self._adopted[-1]
         t_device = float(t_device_ns)
         return t_device - (offset_ref + self.drift * ((t_device - offset_ref) - t_ref))
+
+
+class ClockView:
+    """単調時計向けと壁時計向けの 2 つの推定を読む。"""
+
+    def __init__(self, host: ClockEstimator, wall: ClockEstimator, lock: object | None = None) -> None:
+        self._host = host
+        self._wall = wall
+        self._lock = lock
+
+    def _guard(self):
+        return self._lock if self._lock is not None else _NullCM()
+
+    @property
+    def ready(self) -> bool:
+        with self._guard():
+            return self._host.ready
+
+    @property
+    def offset_ns(self) -> float:
+        with self._guard():
+            return self._host.offset_ns
+
+    @property
+    def rtt_ns(self) -> int:
+        with self._guard():
+            return self._host.rtt_ns
+
+    @property
+    def drift_ppm(self) -> float:
+        with self._guard():
+            return self._host.drift_ppm
+
+    @property
+    def sample_count(self) -> int:
+        with self._guard():
+            return self._host.sample_count
+
+    def device_to_host(self, t_device_ns: int | float) -> float:
+        with self._guard():
+            return self._host.device_to_host(t_device_ns)
+
+    def device_to_wall(self, t_device_ns: int | float) -> float:
+        with self._guard():
+            return self._wall.device_to_host(t_device_ns)
+
+
+class _NullCM:
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, *args: object) -> None:
+        return None

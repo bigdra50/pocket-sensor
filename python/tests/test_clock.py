@@ -24,6 +24,15 @@ def test_t4_before_t1_is_rejected() -> None:
         est.add(ClockSample(t1=200, t2=100, t3=110, t4=150))
 
 
+def test_equal_rtt_prefers_newer_sample() -> None:
+    est = ClockEstimator()
+    # rtt 1 ms、offset 0。そのあと rtt 1 ms、offset 5 ms。同じ rtt なら新しいほう。
+    est.add(ClockSample(t1=0, t2=500_000, t3=500_000, t4=1_000_000))
+    est.add(ClockSample(t1=10_000_000, t2=15_500_000, t3=15_500_000, t4=11_000_000))
+    assert est.rtt_ns == 1_000_000
+    assert est.offset_ns == pytest.approx(5_000_000.0)
+
+
 def test_estimator_prefers_smallest_rtt() -> None:
     est = ClockEstimator(window=8)
     est.add(ClockSample(t1=0, t2=900_500, t3=900_500, t4=400))

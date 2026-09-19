@@ -24,7 +24,12 @@ video = ["av>=12"]
 pocketsensor = "pocketsensor.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff", "pillow>=10"]
+dev = [
+    "pytest>=8",
+    "ruff",
+    "pillow>=10",
+    "foxglove-sdk>=0.27.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pocketsensor"]
@@ -36,9 +41,6 @@ extend-exclude = ["src/pocketsensor/_generated"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-
-[tool.ruff.lint.per-file-ignores]
-"src/pocketsensor/_generated/**" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
