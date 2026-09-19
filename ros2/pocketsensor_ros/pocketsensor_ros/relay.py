@@ -13,6 +13,7 @@ from pocketsensor.cdr import CdrCodec
 from pocketsensor.client import FoxgloveClient
 from pocketsensor.clock import ClockEstimator, ClockSample
 from pocketsensor.errors import ClockNotReady, ConnectionLost, PocketSensorError, ProtocolError
+from pocketsensor.frames import relative_pose
 from pocketsensor.protocol import ChannelInfo
 from pocketsensor.stamp import rewrite_header_stamp
 from pocketsensor.streams import (
@@ -125,6 +126,57 @@ def _channel_key(topic: str) -> str | None:
     return None
 
 
+def _anchors_seen_from_link(codec: CdrCodec, payload: bytes) -> bytes | None:
+    """/tf の 1 メッセージから、<name>_link を親にした anchor だけの TFMessage を作る。
+
+    anchor が載っていなければ None を返す。
+
+    端末は、anchor を必ず同じ時刻の姿勢（先頭の変換）と同じメッセージへ載せる。
+    """
+    message = codec.decode("tf2_msgs/msg/TFMessage", payload)
+    if len(message.transforms) < 2:
+        return None
+    pose = message.transforms[0]
+    link = str(pose.child_frame_id)
+    if not link.endswith("_link"):
+        return None
+    anchor_prefix = f"{link[: -len('_link')]}_anchor_"
+    out: list[dict[str, Any]] = []
+    for tf in message.transforms[1:]:
+        if not str(tf.child_frame_id).startswith(anchor_prefix) or tf.header.frame_id != pose.header.frame_id:
+            continue
+        position, orientation = relative_pose(
+            _xyz(pose.transform.translation),
+            _xyzw(pose.transform.rotation),
+            _xyz(tf.transform.translation),
+            _xyzw(tf.transform.rotation),
+        )
+        out.append(
+            {
+                "header": {
+                    "stamp": {"sec": int(tf.header.stamp.sec), "nanosec": int(tf.header.stamp.nanosec)},
+                    "frame_id": link,
+                },
+                "child_frame_id": str(tf.child_frame_id),
+                "transform": {
+                    "translation": dict(zip("xyz", map(float, position), strict=True)),
+                    "rotation": dict(zip("xyzw", map(float, orientation), strict=True)),
+                },
+            }
+        )
+    if not out:
+        return None
+    return codec.encode("tf2_msgs/msg/TFMessage", codec.make("tf2_msgs/msg/TFMessage", transforms=out))
+
+
+def _xyz(v: Any) -> tuple[float, float, float]:
+    return float(v.x), float(v.y), float(v.z)
+
+
+def _xyzw(q: Any) -> tuple[float, float, float, float]:
+    return float(q.x), float(q.y), float(q.z), float(q.w)
+
+
 class RelayNode:
     """FoxgloveClient で受けた CDR を、そのまま ROS 2 の Publisher へ渡す。
 
@@ -201,7 +253,8 @@ class RelayNode:
             key = _channel_key(channel.topic)
             if self._wanted_keys is not None and key not in self._wanted_keys:
                 continue
-            if not self._publish_tf and channel.topic in {"/tf", "/tf_static"}:
+            # publish_tf が false でも /tf は購読する。anchor を、端末から見た変換へ直して出すため。
+            if not self._publish_tf and channel.topic == "/tf_static":
                 continue
             if channel.topic not in self._pubs:
                 try:
@@ -272,11 +325,19 @@ class RelayNode:
         pub = self._pubs.get(channel.topic)
         if pub is None:
             return
-        data = payload
+        data: bytes | None = payload
+        if channel.topic == "/tf" and not self._publish_tf:
+            try:
+                data = _anchors_seen_from_link(self._codec, payload)
+            except Exception as exc:
+                self._node.get_logger().warning(f"cannot rebuild anchors from /tf: {exc}")
+                return
+            if data is None:
+                return
         if self._rewrite:
             try:
                 with self._lock:
-                    data = rewrite_header_stamp(channel.schema_name, payload, self._map_ns)
+                    data = rewrite_header_stamp(channel.schema_name, data, self._map_ns)
             except ClockNotReady:
                 # 時計合わせが済むまでは捨てる。端末の時刻のまま出すと、ROS 側の時刻と混ざる。
                 return

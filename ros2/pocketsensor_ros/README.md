@@ -33,7 +33,7 @@ USB でつなぐときは `source:=usb:` を渡す。
 | `source` | 文字列 | `ws://iphone.local:8765` | 接続先。`ws://<host>:<port>` か `usb:` |
 | `rewrite_stamp` | 真偽値 | true | `header.stamp` を、このマシンの壁時計へ書き換える |
 | `streams` | 文字列の配列 | 空 | 流すストリーム。空なら、端末が広告したチャンネルをすべて流す |
-| `publish_tf` | 真偽値 | true | false なら `/tf` と `/tf_static` を出さない |
+| `publish_tf` | 真偽値 | true | false なら、端末の姿勢の `/tf` と `/tf_static` を出さない。参照画像の anchor は出す（下の URDF の節を参照） |
 | `reconnect_period` | 実数（秒） | 2.0 | つながらないときと切れたときに、接続し直す間隔 |
 
 `streams` には `color`、`depth`、`pose`、`imu`、`imu_raw`、`mag`、`pressure`、`gnss`、`battery` を書ける。
@@ -81,3 +81,13 @@ IMU の並進は未較正なので 0 にしてある。
 このマクロを使うときは、中継を `publish_tf:=false` で起動する。
 中継の `/tf` は `<name>_odom` から `<name>_link` への変換を出すので、URDF が `<name>_link` の親を決めていると、親が 2 つになる。
 端末の姿勢は `/<name>/odom`（`nav_msgs/Odometry`）から受け取る。
+
+参照画像の anchor は、`publish_tf` の値で出し方が変わる。
+
+| `publish_tf` | `/tf` に出る anchor の変換 |
+| --- | --- |
+| true | `<name>_odom` から `<name>_anchor_<画像の名前>`。端末が送った値のまま |
+| false | `<name>_link` から `<name>_anchor_<画像の名前>`。同じ時刻の端末の姿勢を使って、端末から見た変換へ直す |
+
+false のときの形は、`apriltag_ros` がカメラの frame からタグへの変換を出すのと同じである。
+ロボットの TF の木へそのままつながるので、地図の上のロボットの位置を、貼ってある場所が分かっている画像から求められる。

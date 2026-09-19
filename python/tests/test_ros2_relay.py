@@ -209,16 +209,44 @@ def test_relay_stream_filter_keeps_calibration_and_device_info(relay_module: Any
     }
 
 
-def test_relay_without_tf_drops_both_tf_topics(relay_module: Any) -> None:
+def test_relay_without_tf_publishes_no_device_transforms(relay_module: Any) -> None:
     with FakeDevice(port=0, seed=0) as fake:
         node = _Node(source=fake.url, publish_tf=False)
         relay = relay_module.RelayNode(node)
         try:
-            _wait_until(lambda: _has(node, "/pocketsensor/odom"), timeout=5.0)
+            odom = "/pocketsensor/odom"
+            _wait_until(lambda: _has(node, odom) and len(node.publishers[odom].messages) >= 10, timeout=5.0)
         finally:
             relay.destroy()
-    assert "/tf" not in node.publishers
     assert "/tf_static" not in node.publishers
+    # anchor が映っていなければ、/tf へは何も出さない。
+    assert node.publishers["/tf"].messages == []
+
+
+def test_relay_without_tf_reports_anchors_seen_from_the_device(relay_module: Any, codec: CdrCodec) -> None:
+    with FakeDevice(port=0, seed=0) as fake:
+        fake.anchors = {"dock": ([3.0, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0])}
+        node = _Node(source=fake.url, publish_tf=False)
+        relay = relay_module.RelayNode(node)
+        try:
+            _wait_until(lambda: _has(node, "/tf"), timeout=5.0)
+        finally:
+            relay.destroy()
+    assert "/tf_static" not in node.publishers
+    for _wall_ns, payload in node.publishers["/tf"].messages:
+        message = codec.decode("tf2_msgs/msg/TFMessage", payload)
+        # URDF が <name>_link の親を決めているので、odom からの変換は出さない。
+        assert [(t.header.frame_id, t.child_frame_id) for t in message.transforms] == [
+            ("pocketsensor_link", "pocketsensor_anchor_dock")
+        ]
+    wall_ns, payload = node.publishers["/tf"].messages[-1]
+    transform = codec.decode("tf2_msgs/msg/TFMessage", payload).transforms[0]
+    assert abs(_stamp_ns(transform.header.stamp) - wall_ns) < _NEAR_NS
+    # 擬似デバイスは半径 1 m の円の上にいる。anchor は中心から水平に 3 m、高さ 1 m にある。
+    # 端末から見た距離は、水平に 2 m から 4 m、高さを入れて 2.2 m から 4.2 m に収まる。
+    translation = transform.transform.translation
+    distance = (translation.x**2 + translation.y**2 + translation.z**2) ** 0.5
+    assert 2.2 <= distance <= 4.2
 
 
 def test_relay_reconnects_with_a_fresh_clock_for_a_new_session(relay_module: Any, codec: CdrCodec) -> None:
