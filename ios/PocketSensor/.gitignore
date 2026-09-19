@@ -1,0 +1,6 @@
+PocketSensor.xcodeproj/
+Sources/Info.plist
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+build/

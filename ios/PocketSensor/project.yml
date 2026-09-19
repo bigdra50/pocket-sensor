@@ -1,0 +1,81 @@
+# XcodeGen の定義。`xcodegen generate` で PocketSensor.xcodeproj を作る（生成物は git 管理外）。
+# DEVELOPMENT_TEAM は個人の Personal Team。別アカウントで開くときは Xcode の
+# Signing & Capabilities で差し替えるか、下の値を書き換えて generate し直す。
+name: PocketSensor
+options:
+  bundleIdPrefix: io.github.bigdra50
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    # Swift 6 の厳格な並行性検査は骨格の段階では入れない。ARKit と Core Motion の callback が
+    # それぞれのキューで呼ばれる構造を先に固め、検査は実装が落ち着いてから上げる
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ML46C5PYU7
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  PocketSensor:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+        excludes:
+          - Info.plist
+      - path: Assets.xcassets
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: PocketSensor
+        CFBundleShortVersionString: "0.1.0"
+        NSCameraUsageDescription: ARKit で姿勢と深度を取るためにカメラを使います
+        NSLocalNetworkUsageDescription: ロボットへセンサーデータを送るために LAN からの接続を受け付けます
+        NSMotionUsageDescription: 加速度、角速度、姿勢、気圧を取るためにモーションセンサーを使います
+        NSLocationWhenInUseUsageDescription: GNSS の測位解を取るために位置情報を使います
+        NSBonjourServices:
+          - _pocketsensor._tcp
+        UIRequiredDeviceCapabilities:
+          - arkit
+          - arm64
+        # 台車への取り付けを横置きと縦置きで比べるので、縦も許す。上下逆の縦は入れない。
+        # Face ID の iPhone は、画面を上下逆の縦へ回さない
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeRight
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
+        UILaunchScreen: {}
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.bigdra50.pocketsensor
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: true
+  PocketSensorTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+    dependencies:
+      - target: PocketSensor
+    settings:
+      base:
+        # テストバンドルは Info.plist を持たないので自動生成させる。無いと署名段階で
+        # 「target does not have an Info.plist」で止まり、テストが走らない
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.bigdra50.pocketsensor.tests
+schemes:
+  PocketSensor:
+    build:
+      targets:
+        PocketSensor: all
+        PocketSensorTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PocketSensorTests
