@@ -81,6 +81,11 @@ class _Drain:
                 self._device._stats.dropped_imu = self._device._imu.dropped + self._device._imu_raw.dropped
             return samples
 
+    def latest(self) -> Any:
+        self._device._raise_if_dead()
+        with self._device._lock:
+            return self._buffer.last()
+
 
 class _Latest:
     def __init__(self, device: Device, slot: LatestValue) -> None:

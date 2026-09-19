@@ -29,6 +29,17 @@ def test_sample_buffer_drops_unread_older_than_max_age() -> None:
     assert buf.dropped == 1
 
 
+def test_sample_buffer_last_does_not_drain() -> None:
+    buf = SampleBuffer(max_age_s=2.0)
+    assert buf.last() is None
+    buf.append(_S(1, 1))
+    buf.append(_S(2, 2))
+    assert buf.last() is not None
+    assert buf.last().value == 2
+    assert [s.value for s in buf.read_all()] == [1, 2]
+    assert buf.last() is None
+
+
 def test_latest_value_set_get() -> None:
     slot: LatestValue[int] = LatestValue()
     assert slot.get() is None

@@ -34,6 +34,11 @@ class SampleBuffer(Generic[T]):
             self._samples.popleft()
             self.dropped += 1
 
+    def last(self) -> T | None:
+        if not self._samples:
+            return None
+        return self._samples[-1]
+
     def read_all(self) -> list[T]:
         out = list(self._samples)
         self._samples.clear()
