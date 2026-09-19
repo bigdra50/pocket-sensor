@@ -1,0 +1,13 @@
+{
+  "name": "pocketsensor-foxglove-client-check",
+  "private": true,
+  "type": "module",
+  "description": "Checks the pocketsensor server with the client and decoders that Lichtblick and Foxglove use.",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@foxglove/rosmsg": "5.0.5",
+    "@foxglove/rosmsg2-serialization": "3.1.2",
+    "@foxglove/ws-protocol": "0.8.0",
+    "ws": "8.21.3"
+  }
+}

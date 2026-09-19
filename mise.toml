@@ -37,6 +37,12 @@ depends = ["build:sim"]
 dir = "{{config_root}}/python"
 run = "uv run pytest -q -m e2e"
 
+[tasks."test:foxglove-client"]
+description = "Lichtblick と同じクライアントと復号器で、擬似デバイスの全チャンネルを確かめる（node と npm が要る）"
+depends = ["build:sim"]
+dir = "{{config_root}}/tools/foxglove-client-check"
+run = ["npm ci --no-audit --no-fund --silent", "node check.mjs"]
+
 [tasks."lint:python"]
 description = "Python の lint と整形の検査（SDK、ROS 2 の中継、例）"
 dir = "{{config_root}}/python"
