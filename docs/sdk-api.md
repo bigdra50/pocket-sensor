@@ -46,7 +46,7 @@ with ps.open("ws://iphone.local:8765", config) as dev:   # "usb:" も "run.mcap"
 | 形 | 例 | 内容 |
 | --- | --- | --- |
 | WebSocket の URL | `ws://iphone.local:8765` | WiFi と Ethernet。IP アドレスの直接指定も同じ形 |
-| USB | `usb:`、`usb:<UDID>` | usbmux で転送する。UDID を省くと最初の 1 台を開く |
+| USB | `usb:`、`usb:<UDID>`、`usb:<UDID>:<port>` | usbmux で転送する。UDID を省くと最初の 1 台を開く。ポートを省くと 8765 を使う |
 | ファイルのパス | `run.mcap` | 記録を再生する |
 
 実機、USB、記録ファイルのどれを開いても、返る `Device` の API は同じである。
@@ -171,7 +171,8 @@ RealSense の `playback.set_real_time` と同じ区別で、前者は動作の�
 | 例外 | 起きる場面 |
 | --- | --- |
 | `TimeoutError` | `wait_for_frames` が時間内に組を得られなかった |
-| `ps.ConnectionLost` | 端末との接続が切れた。`session_id` が変わった再接続も含む |
+| `ps.ConnectionFailed` | `open` で端末へつなげなかった。待ち受けが無い、USB に端末が無い、ハンドシェイクの失敗を含む |
+| `ps.ConnectionLost` | つながっていた端末との接続が切れた。`session_id` が変わった再接続も含む |
 | `ps.ProtocolError` | 端末が約束と違うメッセージを送ってきた |
 | `ps.Unsupported` | 端末や記録ファイルが、求められた操作やストリームに対応していない |
 
