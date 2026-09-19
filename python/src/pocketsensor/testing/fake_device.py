@@ -50,8 +50,14 @@ _STAGE1_KEYS = tuple(str(row["key"]) for row in CHANNELS if int(row["stage"]) ==
 
 _STREAM_KEYS: dict[Stream, tuple[str, ...]] = {
     Stream.COLOR: ("color_image", "color_camera_info"),
-    Stream.DEPTH: ("depth_image", "depth_camera_info", "depth_confidence"),
-    Stream.CONFIDENCE: ("depth_confidence",),
+    Stream.DEPTH: (
+        "depth_image",
+        "depth_camera_info",
+        "depth_confidence",
+        "depth_image_compressed",
+        "depth_confidence_compressed",
+    ),
+    Stream.CONFIDENCE: ("depth_confidence", "depth_confidence_compressed"),
     Stream.POSE: ("odom", "tf", "tracking"),
     Stream.ANCHORS: ("tf",),
     Stream.IMU: ("imu",),
@@ -63,6 +69,10 @@ _STREAM_KEYS: dict[Stream, tuple[str, ...]] = {
 }
 
 _ALWAYS_KEYS = ("device_info", "tf_static", "diagnostics")
+_COMPRESSED_DEPTH_KEYS = ("depth_image_compressed", "depth_confidence_compressed")
+_COMPRESSED_DEPTH_HEADER = b"\x00" * 12
+_COMPRESSED_DEPTH_FORMAT = "16UC1; compressedDepth png"
+_COMPRESSED_CONFIDENCE_FORMAT = "mono8; png compressed "
 
 
 def _select_subprotocol(connection: ServerConnection, proposals: list[str]) -> str | None:
@@ -113,6 +123,7 @@ class FakeDevice:
         port: int = 0,
         streams: set[Stream] | None = None,
         seed: int = 0,
+        compressed_depth: bool = True,
     ) -> None:
         self.name = name
         self._port = port
@@ -138,16 +149,20 @@ class FakeDevice:
         self._threads: list[threading.Thread] = []
         self._start_mono = 0
         self._start_wall = 0
+        self._compressed_depth = compressed_depth
         self._keys = self._resolve_keys()
         self._channels, self._by_key, self._by_id = self._build_channels()
         self._services, self._svc_by_key = self._build_services()
 
     def _resolve_keys(self) -> set[str]:
         if self._streams is None:
-            return set(_STAGE1_KEYS)
-        keys = set(_ALWAYS_KEYS)
-        for stream in self._streams:
-            keys.update(_STREAM_KEYS.get(stream, ()))
+            keys = set(_STAGE1_KEYS)
+        else:
+            keys = set(_ALWAYS_KEYS)
+            for stream in self._streams:
+                keys.update(_STREAM_KEYS.get(stream, ()))
+        if not self._compressed_depth:
+            keys.difference_update(_COMPRESSED_DEPTH_KEYS)
         return keys
 
     def _build_channels(self) -> tuple[list[ChannelInfo], dict[str, ChannelInfo], dict[int, ChannelInfo]]:
@@ -648,6 +663,32 @@ class FakeDevice:
         self._broadcast("depth_camera_info", t_wire, self._encode_camera_info(header, width, height))
         self._broadcast("depth_image", t_wire, self._codec.encode("sensor_msgs/msg/Image", depth_msg))
         self._broadcast("depth_confidence", t_wire, self._codec.encode("sensor_msgs/msg/Image", conf_msg))
+        if "depth_image_compressed" in self._by_key:
+            png16 = self._png(depth)
+            compressed_depth = self._codec.make(
+                "sensor_msgs/msg/CompressedImage",
+                header=header,
+                format=_COMPRESSED_DEPTH_FORMAT,
+                data=_COMPRESSED_DEPTH_HEADER + png16,
+            )
+            self._broadcast(
+                "depth_image_compressed",
+                t_wire,
+                self._codec.encode("sensor_msgs/msg/CompressedImage", compressed_depth),
+            )
+        if "depth_confidence_compressed" in self._by_key:
+            png8 = self._png(conf)
+            compressed_conf = self._codec.make(
+                "sensor_msgs/msg/CompressedImage",
+                header=header,
+                format=_COMPRESSED_CONFIDENCE_FORMAT,
+                data=png8,
+            )
+            self._broadcast(
+                "depth_confidence_compressed",
+                t_wire,
+                self._codec.encode("sensor_msgs/msg/CompressedImage", compressed_conf),
+            )
 
     def _encode_camera_info(self, header: dict[str, Any], width: int, height: int) -> bytes:
         base = Intrinsics(
@@ -688,6 +729,13 @@ class FakeDevice:
         quality = int(round(float(self._params["color.jpeg_quality"]) * 100))
         quality = min(95, max(10, quality))
         Image.fromarray(image, "RGB").save(buf, format="JPEG", quality=quality)
+        return buf.getvalue()
+
+    def _png(self, pixels: np.ndarray) -> bytes:
+        if Image is None:
+            return b""
+        buf = io.BytesIO()
+        Image.fromarray(pixels).save(buf, format="PNG")
         return buf.getvalue()
 
     def _emit_imu(self, t_wire: int) -> None:

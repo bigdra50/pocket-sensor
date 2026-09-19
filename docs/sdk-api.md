@@ -88,6 +88,10 @@ RealSense の `frameset` や Azure Kinect の `k4a_capture_t` に当たる。
 | `timestamp(domain)` | 計測時刻。種類は下の「時刻」を参照 |
 | `latency` | 計測から到着までの遅延の推定値 |
 
+深度と confidence は、端末が広告していれば、PNG で可逆圧縮したチャンネルから受け取る。
+`ps.Depth(compressed=False)` を渡すと、無圧縮のチャンネルを使う。
+どちらを使っても、`frames.depth` と `frames.confidence` の中身は同じである。
+
 組が欠けたときの扱いは `FramePolicy` で選ぶ。
 Orbbec の `OBFrameAggregateOutputMode` に倣った。
 
@@ -231,7 +235,7 @@ LiDAR の無い機種では、深度と confidence が一覧に現れない。
 | 配列 | `numpy` | 必須 |
 | CDR の復号 | `rosbags`（Apache-2.0、純 Python） | 必須。ROS 2 のインストールは要らない |
 | MCAP | `mcap` | 必須 |
-| JPEG の復号 | `simplejpeg`、`opencv-python`、`Pillow` のうち、入っているもの | 追加の依存（`pocketsensor[jpeg]` は `Pillow` を入れる） |
+| JPEG と PNG の復号 | `Pillow` | 必須。`simplejpeg` か `opencv-python` が入っていれば、JPEG の復号にはそちらを先に使う |
 | Bonjour | `zeroconf`（LGPL-2.1-or-later） | 追加の依存（`pocketsensor[discovery]`） |
 | H.264 の復号 | `av` | 追加の依存（`pocketsensor[video]`） |
 

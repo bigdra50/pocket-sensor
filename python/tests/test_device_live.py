@@ -54,7 +54,7 @@ def test_open_close_and_shared_timestamps() -> None:
 
 def test_require_all_vs_any_with_dropped_members() -> None:
     with FakeDevice(port=0, seed=0) as fake:
-        fake.drop_members({"depth_image", "depth_confidence"})
+        fake.drop_members({"depth_image_compressed", "depth_confidence_compressed"})
         cfg_all = _live_config(frame_policy=ps.FramePolicy.REQUIRE_ALL)
         with ps.open(fake.url, cfg_all) as dev:
             with pytest.raises(TimeoutError):
@@ -220,3 +220,56 @@ def test_stats_count_drops_when_consumer_is_slow() -> None:
             frames = dev.wait_for_frames(timeout=2.0)
             assert frames.t_device_ns > 0
             assert np.isnan(dev.calibration.raw["imu"]["noise_density"])
+
+
+def test_default_depth_uses_compressed_when_advertised() -> None:
+    with FakeDevice(port=0, seed=0) as fake:
+        with ps.open(fake.url, _live_config()) as dev:
+            frames = dev.wait_for_frames(timeout=2.0)
+            assert frames.depth is not None
+            assert frames.depth.raw.dtype == np.uint16
+            assert frames.depth.raw.shape == (192, 256)
+            assert frames.confidence is not None
+            meters = frames.depth.meters
+            assert np.all(np.isnan(meters[frames.depth.raw == 0]))
+            compressed = "/pocketsensor/depth/image/compressedDepth"
+            raw = "/pocketsensor/depth/image"
+            _wait_until(lambda: dev.stats.received_messages.get(compressed, 0) > 0, timeout=2.0)
+            assert dev.stats.received_messages.get(raw, 0) == 0
+
+
+def test_depth_compressed_false_uses_raw() -> None:
+    streams = (
+        ps.Color(rate=15, width=32, jpeg_quality=0.4),
+        ps.Depth(rate=15, compressed=False),
+        ps.Pose(rate=30),
+        ps.Imu(rate=100),
+    )
+    with FakeDevice(port=0, seed=0) as fake:
+        with ps.open(fake.url, _live_config(streams=streams)) as dev:
+            frames = dev.wait_for_frames(timeout=2.0)
+            assert frames.depth is not None
+            raw = "/pocketsensor/depth/image"
+            compressed = "/pocketsensor/depth/image/compressedDepth"
+            _wait_until(lambda: dev.stats.received_messages.get(raw, 0) > 0, timeout=2.0)
+            assert dev.stats.received_messages.get(compressed, 0) == 0
+
+
+def test_depth_compressed_true_unsupported_on_old_device() -> None:
+    streams = (
+        ps.Color(rate=15, width=32, jpeg_quality=0.4),
+        ps.Depth(rate=15, compressed=True),
+        ps.Pose(rate=30),
+    )
+    with FakeDevice(port=0, seed=0, compressed_depth=False) as fake:
+        with pytest.raises(ps.Unsupported, match="not advertised"):
+            ps.open(fake.url, _live_config(streams=streams, open_timeout=3.0))
+
+
+def test_depth_default_falls_back_when_device_omits_compressed() -> None:
+    with FakeDevice(port=0, seed=0, compressed_depth=False) as fake:
+        with ps.open(fake.url, _live_config()) as dev:
+            frames = dev.wait_for_frames(timeout=2.0)
+            assert frames.depth is not None
+            assert "/pocketsensor/depth/image" in dev.stats.received_messages
+            assert "/pocketsensor/depth/image/compressedDepth" not in dev.stats.received_messages

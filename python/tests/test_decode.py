@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
 import io
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -12,6 +15,8 @@ from pocketsensor.decode import (
     decode_battery,
     decode_camera_info,
     decode_color,
+    decode_compressed_depth,
+    decode_compressed_mono8,
     decode_confidence,
     decode_depth,
     decode_imu,
@@ -19,7 +24,7 @@ from pocketsensor.decode import (
     decode_pose,
     stamp_to_ns,
 )
-from pocketsensor.errors import Unsupported
+from pocketsensor.errors import ProtocolError, Unsupported
 from pocketsensor.intrinsics import Intrinsics
 
 
@@ -170,7 +175,7 @@ def test_jpeg_plugin_falls_back_to_pil(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_jpeg_missing_decoder_raises_unsupported(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pocketsensor.decode._import_optional", lambda name: None)
-    with pytest.raises(Unsupported, match=r"pocketsensor\[jpeg\]"):
+    with pytest.raises(Unsupported, match="Pillow"):
         decode_jpeg(b"x")
 
 
@@ -254,3 +259,90 @@ def test_decode_pose_and_battery(codec: CdrCodec) -> None:
     status = decode_battery(bat)
     assert status.percentage == pytest.approx(0.55)
     assert status.power_supply_status == 2
+
+
+def _png_array(arr: np.ndarray) -> bytes:
+    buf = io.BytesIO()
+    Image.fromarray(arr).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_decode_compressed_depth_pixels_and_header(codec: CdrCodec) -> None:
+    pixels = np.array([[0, 1, 255, 256], [1000, 32768, 65535, 2]], dtype=np.uint16)
+    png = _png_array(pixels)
+    header = b"\x00" * 12
+    msg = codec.make(
+        "sensor_msgs/msg/CompressedImage",
+        header={"stamp": {"sec": 1, "nanosec": 2}, "frame_id": "optical"},
+        format="16UC1; compressedDepth png",
+        data=header + png,
+    )
+    out = decode_compressed_depth(msg)
+    assert out.dtype == np.uint16
+    assert out.flags["C_CONTIGUOUS"]
+    assert out.shape == (2, 4)
+    np.testing.assert_array_equal(out, pixels)
+
+
+def test_decode_compressed_mono8_trailing_space(codec: CdrCodec) -> None:
+    pixels = np.array([[0, 1, 2], [2, 1, 0]], dtype=np.uint8)
+    png = _png_array(pixels)
+    msg = codec.make(
+        "sensor_msgs/msg/CompressedImage",
+        header={"stamp": {"sec": 0, "nanosec": 0}, "frame_id": "optical"},
+        format="mono8; png compressed ",
+        data=png,
+    )
+    out = decode_compressed_mono8(msg)
+    assert out.dtype == np.uint8
+    assert out.flags["C_CONTIGUOUS"]
+    np.testing.assert_array_equal(out, pixels)
+
+
+def test_decode_compressed_depth_rejects_bad_format_and_short_header(codec: CdrCodec) -> None:
+    png = _png_array(np.zeros((2, 2), dtype=np.uint16))
+    bad_fmt = codec.make(
+        "sensor_msgs/msg/CompressedImage",
+        format="jpeg",
+        data=b"\x00" * 12 + png,
+    )
+    with pytest.raises(Unsupported, match="compressedDepth"):
+        decode_compressed_depth(bad_fmt)
+    short = codec.make(
+        "sensor_msgs/msg/CompressedImage",
+        format="16UC1; compressedDepth png",
+        data=b"\x00" * 11,
+    )
+    with pytest.raises(ProtocolError, match="12-byte"):
+        decode_compressed_depth(short)
+    garbage = codec.make(
+        "sensor_msgs/msg/CompressedImage",
+        format="16UC1; compressedDepth png",
+        data=b"\x00" * 12 + b"not-a-png",
+    )
+    with pytest.raises(ProtocolError, match="PNG"):
+        decode_compressed_depth(garbage)
+
+
+def test_shared_png_vectors_decode(codec: CdrCodec, repo_root: Path) -> None:
+    payload = json.loads((repo_root / "contract" / "vectors" / "png.json").read_text())
+    by_name = {row["name"]: row for row in payload["cases"]}
+    gray16 = by_name["gray16_8x4"]
+    png16 = base64.b64decode(gray16["png_b64"])
+    expected16 = np.asarray(gray16["pixels"], dtype=np.uint16).reshape(gray16["height"], gray16["width"])
+    msg16 = codec.make(
+        "sensor_msgs/msg/CompressedImage",
+        format="16UC1; compressedDepth png",
+        data=b"\x00" * 12 + png16,
+    )
+    np.testing.assert_array_equal(decode_compressed_depth(msg16), expected16)
+
+    gray8 = by_name["gray8_8x4"]
+    png8 = base64.b64decode(gray8["png_b64"])
+    expected8 = np.asarray(gray8["pixels"], dtype=np.uint8).reshape(gray8["height"], gray8["width"])
+    msg8 = codec.make(
+        "sensor_msgs/msg/CompressedImage",
+        format="mono8; png compressed ",
+        data=png8,
+    )
+    np.testing.assert_array_equal(decode_compressed_mono8(msg8), expected8)

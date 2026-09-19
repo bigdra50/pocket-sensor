@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
+from PIL import Image
 
 from pocketsensor.errors import ProtocolError, Unsupported
 from pocketsensor.intrinsics import Intrinsics
@@ -69,7 +70,7 @@ def decode_jpeg(data: bytes) -> NDArray[np.uint8]:
     if pil_image is not None:
         image = pil_image.open(io.BytesIO(data))
         return np.asarray(image.convert("RGB"))
-    raise Unsupported("JPEG decoding requires simplejpeg, OpenCV, or Pillow. pip install pocketsensor[jpeg]")
+    raise Unsupported("JPEG decoding requires simplejpeg, OpenCV, or Pillow")
 
 
 def decode_image_u16(msg: Any) -> NDArray[np.uint16]:
@@ -86,6 +87,55 @@ def decode_image_u16(msg: Any) -> NDArray[np.uint16]:
         offset = row * step
         out[row] = np.frombuffer(raw, dtype=dt, count=width, offset=offset)
     return out
+
+
+def _format_parts(fmt: Any) -> tuple[str, str]:
+    text = str(fmt)
+    if ";" not in text:
+        return text.strip(), ""
+    pix, rest = text.split(";", 1)
+    return pix.strip(), rest.strip()
+
+
+def _open_png(data: bytes) -> Image.Image:
+    try:
+        image = Image.open(io.BytesIO(data))
+        image.load()
+    except Exception as exc:
+        raise ProtocolError("failed to decode PNG") from exc
+    return image
+
+
+def decode_compressed_depth(msg: Any) -> NDArray[np.uint16]:
+    """sensor_msgs/CompressedImage の compressedDepth PNG を uint16 (H, W) にする。"""
+    pix, codec = _format_parts(getattr(msg, "format", ""))
+    tokens = codec.split()
+    if pix != "16UC1" or "compressedDepth" not in tokens or "png" not in tokens:
+        raise Unsupported(f"unsupported compressedDepth format: {getattr(msg, 'format', '')!r}")
+    raw = _as_bytes(msg.data)
+    if len(raw) < 12:
+        raise ProtocolError("compressedDepth payload shorter than 12-byte header")
+    image = _open_png(raw[12:])
+    arr = np.asarray(image)
+    if arr.ndim != 2:
+        raise ProtocolError("compressedDepth PNG must be grayscale")
+    # 8 bit だと 256 以上の画素が落ちる。16UC1 の mm 値はそのまま載っている。
+    if arr.dtype == np.uint8 or image.mode == "L":
+        raise ProtocolError("compressedDepth PNG must be 16-bit")
+    return np.ascontiguousarray(arr, dtype=np.uint16)
+
+
+def decode_compressed_mono8(msg: Any) -> NDArray[np.uint8]:
+    """sensor_msgs/CompressedImage の 8 bit PNG を uint8 (H, W) にする。"""
+    pix, codec = _format_parts(getattr(msg, "format", ""))
+    tokens = codec.split()
+    if pix != "mono8" or "png" not in tokens:
+        raise Unsupported(f"unsupported compressed mono8 format: {getattr(msg, 'format', '')!r}")
+    image = _open_png(_as_bytes(msg.data))
+    arr = np.asarray(image)
+    if arr.ndim != 2:
+        raise ProtocolError("compressed mono8 PNG must be grayscale")
+    return np.ascontiguousarray(arr, dtype=np.uint8)
 
 
 def decode_image_u8(msg: Any) -> NDArray[np.uint8]:
@@ -130,6 +180,18 @@ def decode_depth(msg: Any, intrinsics: Intrinsics) -> DepthFrame:
 
 def decode_confidence(msg: Any) -> ConfidenceFrame:
     return ConfidenceFrame(levels=decode_image_u8(msg))
+
+
+def decode_depth_compressed(msg: Any, intrinsics: Intrinsics) -> DepthFrame:
+    return DepthFrame(
+        raw=decode_compressed_depth(msg),
+        intrinsics=intrinsics,
+        frame_id=str(msg.header.frame_id),
+    )
+
+
+def decode_confidence_compressed(msg: Any) -> ConfidenceFrame:
+    return ConfidenceFrame(levels=decode_compressed_mono8(msg))
 
 
 def decode_pose(msg: Any) -> PoseSample:

@@ -637,6 +637,7 @@ dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pillow" },
     { name = "rosbags" },
     { name = "websockets", version = "16.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "websockets", version = "17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -645,9 +646,6 @@ dependencies = [
 [package.optional-dependencies]
 discovery = [
     { name = "zeroconf" },
-]
-jpeg = [
-    { name = "pillow" },
 ]
 video = [
     { name = "av", version = "17.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -667,12 +665,12 @@ requires-dist = [
     { name = "av", marker = "extra == 'video'", specifier = ">=12" },
     { name = "mcap", specifier = ">=1.2" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "pillow", marker = "extra == 'jpeg'", specifier = ">=10" },
+    { name = "pillow", specifier = ">=10" },
     { name = "rosbags", specifier = ">=0.10" },
     { name = "websockets", specifier = ">=13" },
     { name = "zeroconf", marker = "extra == 'discovery'", specifier = ">=0.130" },
 ]
-provides-extras = ["jpeg", "discovery", "video"]
+provides-extras = ["discovery", "video"]
 
 [package.metadata.requires-dev]
 dev = [

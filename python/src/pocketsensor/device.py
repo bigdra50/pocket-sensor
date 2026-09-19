@@ -23,7 +23,9 @@ from pocketsensor.decode import (
     decode_camera_info,
     decode_color,
     decode_confidence,
+    decode_confidence_compressed,
     decode_depth,
+    decode_depth_compressed,
     decode_device_info,
     decode_gnss,
     decode_imu,
@@ -43,6 +45,8 @@ from pocketsensor.streams import (
     Depth,
     Stream,
     channel_topic,
+    resolve_channel_keys,
+    topic_to_key,
 )
 from pocketsensor.transport import connect
 from pocketsensor.types import (
@@ -142,6 +146,7 @@ class Device:
         self._depth_info_at: dict[int, Intrinsics] = {}
         self._color_msg_at: dict[int, Any] = {}
         self._depth_msg_at: dict[int, Any] = {}
+        self._depth_compressed_at: dict[int, bool] = {}
         self._topic_key: dict[str, str] = {}
         self._decode_color = True
         for spec in config.streams:
@@ -218,10 +223,15 @@ class Device:
             if channel.schema:
                 self._codec.register_schema(channel.schema_name, channel.schema)
         self._name = self._resolve_name()
+        advertised: set[str] = set()
+        for topic in self._client.channels:
+            key = topic_to_key(topic, self._name)
+            if key is not None:
+                advertised.add(key)
         wanted: set[str] = {"device_info", "tf_static", "diagnostics"}
         for spec in self._config.streams:
-            wanted.update(spec.channel_keys())
-        for key in wanted:
+            wanted.update(resolve_channel_keys(spec, advertised))
+        for key in sorted(wanted):
             topic = channel_topic(key, self._name)
             if topic not in self._client.channels:
                 raise Unsupported(f"channel not advertised: {topic}")
@@ -536,10 +546,19 @@ class Device:
             return
         if key == "depth_image":
             self._depth_msg_at[t_ns] = msg
+            self._depth_compressed_at[t_ns] = False
+            self._try_depth(t_ns, arrival)
+            return
+        if key == "depth_image_compressed":
+            self._depth_msg_at[t_ns] = msg
+            self._depth_compressed_at[t_ns] = True
             self._try_depth(t_ns, arrival)
             return
         if key == "depth_confidence":
             self._offer(Stream.CONFIDENCE, t_ns, decode_confidence(msg), arrival)
+            return
+        if key == "depth_confidence_compressed":
+            self._offer(Stream.CONFIDENCE, t_ns, decode_confidence_compressed(msg), arrival)
             return
         if key == "odom":
             self._offer(Stream.POSE, t_ns, decode_pose(msg), arrival)
@@ -602,7 +621,11 @@ class Device:
         if msg is None or info is None:
             return
         self._depth_msg_at.pop(t_ns, None)
-        frame = decode_depth(msg, info)
+        compressed = self._depth_compressed_at.pop(t_ns, False)
+        if compressed:
+            frame = decode_depth_compressed(msg, info)
+        else:
+            frame = decode_depth(msg, info)
         self._offer(Stream.DEPTH, t_ns, frame, arrival)
 
     def _offer(self, stream: Stream | str, t_ns: int, value: Any, arrival: int) -> None:

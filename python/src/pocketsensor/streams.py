@@ -77,16 +77,39 @@ class Color:
 class Depth:
     rate: float | None = None
     confidence: bool = True
+    compressed: bool | None = None
 
     @property
     def stream(self) -> Stream:
         return Stream.DEPTH
 
     def channel_keys(self) -> tuple[str, ...]:
+        """広告を見ない。圧縮にするかは Device が open 時に決める。"""
+        if self.compressed is True:
+            keys = ("depth_image_compressed", "depth_camera_info")
+            if self.confidence:
+                return (*keys, "depth_confidence_compressed")
+            return keys
         keys = ("depth_image", "depth_camera_info")
         if self.confidence:
             return (*keys, "depth_confidence")
         return keys
+
+    def resolve_channel_keys(self, advertised: set[str]) -> tuple[str, ...]:
+        depth_key = self._pick("depth_image_compressed", "depth_image", advertised)
+        keys = [depth_key, "depth_camera_info"]
+        if self.confidence:
+            keys.append(self._pick("depth_confidence_compressed", "depth_confidence", advertised))
+        return tuple(keys)
+
+    def _pick(self, compressed_key: str, raw_key: str, advertised: set[str]) -> str:
+        if self.compressed is True:
+            return compressed_key
+        if self.compressed is False:
+            return raw_key
+        if compressed_key in advertised:
+            return compressed_key
+        return raw_key
 
     def parameters(self) -> dict[str, float | int]:
         if self.rate is None:
@@ -208,3 +231,10 @@ RATE_PARAM_BY_STREAM: dict[Stream, str] = {
     Stream.IMU: "imu.rate",
     Stream.IMU_RAW: "imu.rate",
 }
+
+
+def resolve_channel_keys(spec: StreamSpec, advertised: set[str]) -> tuple[str, ...]:
+    """Depth の圧縮チャンネルは、端末が広告したものを見て決める。"""
+    if isinstance(spec, Depth):
+        return spec.resolve_channel_keys(advertised)
+    return spec.channel_keys()

@@ -20,7 +20,7 @@ from pocketsensor.device import Device
 from pocketsensor.errors import ConnectionFailed, ProtocolError, Unsupported
 from pocketsensor.frameset import FrameSetAssembler
 from pocketsensor.protocol import ChannelInfo
-from pocketsensor.streams import channel_topic, topic_to_key
+from pocketsensor.streams import channel_topic, resolve_channel_keys, topic_to_key
 
 log = logging.getLogger("pocketsensor.playback")
 
@@ -82,6 +82,7 @@ class PlaybackDevice(Device):
             self._pending_sets.clear()
             self._color_msg_at.clear()
             self._depth_msg_at.clear()
+            self._depth_compressed_at.clear()
             self._msg_q.clear()
         self._fp = Path(self._path).open("rb")
         self._msg_iter = make_reader(self._fp).iter_messages(log_time_order=True)
@@ -152,10 +153,15 @@ class PlaybackDevice(Device):
 
     def _require_wanted_topics(self, topics: list[str]) -> None:
         present = set(topics)
+        advertised: set[str] = set()
+        for topic in topics:
+            key = topic_to_key(topic, self._name)
+            if key is not None:
+                advertised.add(key)
         wanted: set[str] = {"device_info", "tf_static"}
         for spec in self._config.streams:
-            wanted.update(spec.channel_keys())
-        for key in wanted:
+            wanted.update(resolve_channel_keys(spec, advertised))
+        for key in sorted(wanted):
             topic = channel_topic(key, self._name)
             if topic not in present:
                 raise Unsupported(f"channel not advertised: {topic}")

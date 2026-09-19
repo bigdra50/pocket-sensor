@@ -47,10 +47,10 @@ Python 3.10 以降が要る。
 PyPI には出していないので、リポジトリから入れる。
 
 ```
-uv add --editable <リポジトリの場所>/python --extra jpeg --extra discovery
+uv add --editable <リポジトリの場所>/python --extra discovery
 ```
 
-`jpeg` は RGB の復号（Pillow）、`discovery` は Bonjour での発見（zeroconf）を足す。
+`discovery` は、Bonjour での発見に使う zeroconf を足す。
 
 ## Usage
 

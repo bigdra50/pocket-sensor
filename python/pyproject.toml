@@ -13,10 +13,10 @@ dependencies = [
     "websockets>=13",
     "rosbags>=0.10",
     "mcap>=1.2",
+    "pillow>=10",
 ]
 
 [project.optional-dependencies]
-jpeg = ["pillow>=10"]
 discovery = ["zeroconf>=0.130"]
 video = ["av>=12"]
 

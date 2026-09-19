@@ -161,3 +161,71 @@ def test_playback_without_clock_samples_host_not_ready(tmp_path: Path, recorded_
         frames = dev.wait_for_frames(timeout=2.0)
         with pytest.raises(ClockNotReady):
             frames.timestamp(ps.TimeDomain.HOST)
+
+
+def _record_with_depth(*, compressed: bool | None, path: Path) -> None:
+    streams = (
+        ps.Color(rate=15, width=32, jpeg_quality=0.4),
+        ps.Depth(rate=15, compressed=compressed),
+        ps.Pose(rate=30),
+        ps.Imu(rate=100),
+    )
+    cfg = ps.Config(streams=streams, open_timeout=5.0)
+    with FakeDevice(port=0, seed=0) as fake:
+        with ps.open(fake.url, cfg) as dev:
+            with dev.record(path):
+                got = 0
+                deadline = time.monotonic() + 1.2
+                while time.monotonic() < deadline and got < 3:
+                    try:
+                        dev.wait_for_frames(timeout=0.25)
+                        got += 1
+                    except TimeoutError:
+                        pass
+                assert got >= 2
+
+
+def test_playback_compressed_and_raw_recordings(tmp_path: Path) -> None:
+    compressed_path = tmp_path / "compressed.mcap"
+    raw_path = tmp_path / "raw.mcap"
+    _record_with_depth(compressed=True, path=compressed_path)
+    _record_with_depth(compressed=False, path=raw_path)
+
+    cfg_default = _cfg()
+    cfg_raw = _cfg(
+        streams=(
+            ps.Color(rate=15, width=32, jpeg_quality=0.4),
+            ps.Depth(rate=15, compressed=False),
+            ps.Pose(rate=30),
+            ps.Imu(rate=100),
+        )
+    )
+    cfg_force = _cfg(
+        streams=(
+            ps.Color(rate=15, width=32, jpeg_quality=0.4),
+            ps.Depth(rate=15, compressed=True),
+            ps.Pose(rate=30),
+            ps.Imu(rate=100),
+        )
+    )
+
+    with ps.open(str(compressed_path), cfg_default, realtime=False) as dev:
+        frames = dev.wait_for_frames(timeout=2.0)
+        assert frames.depth is not None
+        assert frames.depth.raw.shape == (192, 256)
+        assert frames.confidence is not None
+    with ps.open(str(compressed_path), cfg_force, realtime=False) as dev:
+        frames = dev.wait_for_frames(timeout=2.0)
+        assert frames.depth is not None
+    with pytest.raises(ps.Unsupported):
+        ps.open(str(compressed_path), cfg_raw, realtime=False)
+
+    with ps.open(str(raw_path), cfg_raw, realtime=False) as dev:
+        frames = dev.wait_for_frames(timeout=2.0)
+        assert frames.depth is not None
+        assert frames.depth.raw.shape == (192, 256)
+    with ps.open(str(raw_path), cfg_default, realtime=False) as dev:
+        frames = dev.wait_for_frames(timeout=2.0)
+        assert frames.depth is not None
+    with pytest.raises(ps.Unsupported):
+        ps.open(str(raw_path), cfg_force, realtime=False)
