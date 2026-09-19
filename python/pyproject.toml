@@ -44,3 +44,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end tests against the Swift simulated device",
+]
+addopts = ["-m", "not e2e"]
