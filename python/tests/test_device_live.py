@@ -116,10 +116,14 @@ def test_timeout_and_connection_lost() -> None:
             except TimeoutError:
                 pass
             fake.stall(5.0)
-            try:
-                dev.wait_for_frames(timeout=0.05)
-            except TimeoutError:
-                pass
+            # stall の前に送り出された分は遅れて届く。届き終わるまで読み捨ててから、止まったことを確かめる。
+            quiet_by = time.monotonic() + 2.0
+            while True:
+                try:
+                    dev.wait_for_frames(timeout=0.2)
+                except TimeoutError:
+                    break
+                assert time.monotonic() < quiet_by, "frames kept arriving while the device was stalled"
             with pytest.raises(TimeoutError):
                 dev.wait_for_frames(timeout=0.3)
             fake.stall(0.0)
