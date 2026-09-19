@@ -149,7 +149,8 @@ REP-145 が、重力を含む比力を求めているためである。
 
 - 高度は `ellipsoidalAltitude` を使う。`altitude` は海抜で、`NavSatFix` が求める楕円体からの高さと基準が違う
 - `position_covariance` は East、North、Up の順の対角へ、精度の二乗を入れる。`position_covariance_type` は `APPROXIMATED` とする
-- `horizontalAccuracy` が負なら測位は無効で、`status` を `STATUS_NO_FIX` にする
+- `horizontalAccuracy` が負なら測位は無効で、`status` を `STATUS_NO_FIX` にし、緯度、経度、高度を NaN にする
+- `verticalAccuracy` だけが負なら、高度だけを NaN にする
 - 衛星系の別は API から分からないので、`service` は 0 とする
 - 測位の時刻（壁時計）は `gnss/time_reference` の `time_ref` に入れる。`header.stamp` の扱いは [time.md](time.md) にある
 
