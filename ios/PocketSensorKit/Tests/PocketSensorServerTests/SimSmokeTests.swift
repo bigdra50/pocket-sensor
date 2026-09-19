@@ -185,6 +185,93 @@ final class SimSmokeTests: XCTestCase {
         }
     }
 
+    func testInvalidAnchorNameExitsWithUsageStatus() throws {
+        let exe = try XCTUnwrap(simExecutableURL(), "pocketsensor-sim was not built")
+        let process = Process()
+        process.executableURL = exe
+        process.arguments = ["--port", "0", "--no-bonjour", "--anchor", "Dock"]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 2)
+    }
+
+    func testAnchorOnTfSharesPoseTransformAndHalfSecondGate() throws {
+        let exe = try XCTUnwrap(simExecutableURL(), "pocketsensor-sim was not built")
+        let process = Process()
+        process.executableURL = exe
+        process.arguments = ["--port", "0", "--no-bonjour", "--duration", "6", "--anchor", "dock"]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        try process.run()
+        addTeardownBlock {
+            if process.isRunning {
+                process.terminate()
+            }
+        }
+
+        let ready = expectation(description: "READY")
+        ready.assertForOverFulfill = false
+        var port: UInt16 = 0
+        var buffer = Data()
+        stdout.fileHandleForReading.readabilityHandler = { handle in
+            buffer.append(handle.availableData)
+            while let newline = buffer.firstIndex(of: 0x0A) {
+                let line = String(data: buffer.subdata(in: buffer.startIndex ..< newline), encoding: .utf8) ?? ""
+                buffer.removeSubrange(buffer.startIndex ... newline)
+                if line.hasPrefix("READY port="), let value = UInt16(line.dropFirst("READY port=".count)) {
+                    port = value
+                    ready.fulfill()
+                }
+            }
+        }
+        waitCompleted(ready)
+        stdout.fileHandleForReading.readabilityHandler = nil
+        XCTAssertGreaterThan(port, 0)
+
+        let client = WSTestClient(port: port, protocols: [Subprotocol.sdkV1])
+        addTeardownBlock { client.close() }
+        XCTAssertNotNil(client.waitOpen())
+        let handshake = client.waitHandshake()
+        let channels = try XCTUnwrap(handshake.advertise["channels"] as? [[String: Any]])
+        let tfId = try XCTUnwrap(jsonUInt32(channels.first { ($0["topic"] as? String) == "/tf" }?["id"]))
+        client.sendJSON([
+            "op": "subscribe",
+            "subscriptions": [
+                ["id": 1, "channelId": tfId],
+            ],
+        ])
+
+        pause(0.3)
+        _ = client.drainBinaries()
+        pause(2.0)
+        let frames = client.drainBinaries()
+
+        var dockStamps: [UInt64] = []
+        var dockMessages = 0
+        for data in frames {
+            guard case .messageData(let sub, let stamp, let payload)? = try? FoxgloveBinary.parseServerBinary(data) else {
+                continue
+            }
+            guard sub == 1 else { continue }
+            var decoder = try CDRDecoder(data: payload)
+            let msg = try decoder.decode(Tf2Msgs.TFMessage.self)
+            let children = msg.transforms.map(\.childFrameId)
+            if children.contains(where: { $0.hasSuffix("_anchor_dock") }) {
+                dockMessages += 1
+                dockStamps.append(stamp)
+                XCTAssertTrue(children.contains(where: { $0.hasSuffix("_link") }), "pose transform missing from anchor TFMessage")
+            }
+        }
+        XCTAssertGreaterThanOrEqual(dockMessages, 2)
+        for index in 1 ..< dockStamps.count {
+            let delta = dockStamps[index] - dockStamps[index - 1]
+            XCTAssertGreaterThanOrEqual(delta, 500_000_000 - 1_000_000)
+        }
+    }
+
     private func pause(_ seconds: TimeInterval) {
         let exp = expectation(description: "pause \(seconds)")
         exp.isInverted = true

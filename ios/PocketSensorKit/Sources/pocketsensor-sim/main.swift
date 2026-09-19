@@ -20,7 +20,7 @@ let server = FoxgloveServer(
     anchor: anchor,
     monoClockNs: { Int64(bitPattern: DispatchTime.now().uptimeNanoseconds) }
 )
-let device = SimulatedDevice(server: server, anchor: anchor, startMonoNs: startMonoNs, deviceName: args.name)
+let device = SimulatedDevice(server: server, anchor: anchor, startMonoNs: startMonoNs, deviceName: args.name, anchorNames: args.anchors)
 device.setSessionId(sessionId)
 
 let stopOnce = NSLock()

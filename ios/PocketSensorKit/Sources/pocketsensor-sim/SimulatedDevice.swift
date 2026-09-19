@@ -12,6 +12,20 @@ struct SimArgs {
     var advertiseBonjour = true
     var duration: Double?
     var quiet = false
+    var anchors: [String] = []
+}
+
+func usageAndExit(_ message: String) -> Never {
+    fputs("\(message)\n", stderr)
+    exit(2)
+}
+
+/// 画像名は frame 名の一部。英小文字、数字、下線。空は不可。
+func isValidAnchorImageName(_ name: String) -> Bool {
+    guard !name.isEmpty else { return false }
+    return name.utf8.allSatisfy { byte in
+        (0x61 ... 0x7A).contains(byte) || (0x30 ... 0x39).contains(byte) || byte == 0x5F
+    }
 }
 
 func parseSimArgs(_ argv: [String]) -> SimArgs {
@@ -39,6 +53,16 @@ func parseSimArgs(_ argv: [String]) -> SimArgs {
             }
         case "--quiet":
             parsed.quiet = true
+        case "--anchor":
+            index += 1
+            guard index < argv.count else {
+                usageAndExit("--anchor requires an image name")
+            }
+            let name = argv[index]
+            guard isValidAnchorImageName(name) else {
+                usageAndExit("invalid --anchor name \(name)")
+            }
+            parsed.anchors.append(name)
         default:
             fputs("unknown argument \(arg)\n", stderr)
         }
@@ -107,12 +131,15 @@ final class SimulatedDevice: @unchecked Sendable {
     private var encodeSkipCount = 0
     private var lastBarCol = -1
     private var currentSessionId = ""
+    private var anchorGate = AnchorGate()
+    private let anchorNames: [String]
 
-    init(server: FoxgloveServer, anchor: ClockAnchor, startMonoNs: Int64, deviceName: String) {
+    init(server: FoxgloveServer, anchor: ClockAnchor, startMonoNs: Int64, deviceName: String, anchorNames: [String] = []) {
         self.server = server
         self.anchor = anchor
         self.startMonoNs = startMonoNs
         self.deviceName = deviceName
+        self.anchorNames = anchorNames
         colorBuffer = makeBGRABuffer(width: 1920, height: 1440)
         depthBuffer = makeFloatBuffer(width: 256, height: 192, format: kCVPixelFormatType_DepthFloat32)
         confidenceBuffer = makeFloatBuffer(width: 256, height: 192, format: kCVPixelFormatType_OneComponent8)
@@ -243,24 +270,29 @@ final class SimulatedDevice: @unchecked Sendable {
         let depthDiv = FrameDecimator.divisor(rateLimitHz: rates.depth, thermal: .nominal)
         var items: [(String, Data)] = []
 
-        if FrameDecimator.shouldSend(frameIndex: index, divisor: poseDiv) {
-            let pose = PoseInput(
-                cameraTransform: cameraOnCircle(frameIndex: index),
-                state: trackingState,
-                reason: .none,
-                originEpoch: rates.epoch
-            )
+        let poseDue = FrameDecimator.shouldSend(frameIndex: index, divisor: poseDiv)
+        let pose = PoseInput(
+            cameraTransform: cameraOnCircle(frameIndex: index),
+            state: trackingState,
+            reason: .none,
+            originEpoch: rates.epoch
+        )
+        if poseDue {
             if server.hasSubscribers("tracking") {
                 items.append(("tracking", encodeCDR(MessageBuilders.tracking(stampNs: stampNs, names: names, pose: pose))))
             }
-            if trackingState != .notAvailable {
-                if server.hasSubscribers("odom") {
-                    items.append(("odom", encodeCDR(MessageBuilders.odometry(stampNs: stampNs, names: names, pose: pose))))
-                }
-                if server.hasSubscribers("tf") {
-                    items.append(("tf", encodeCDR(MessageBuilders.tf(stampNs: stampNs, names: names, pose: pose))))
-                }
+            if trackingState != .notAvailable, server.hasSubscribers("odom") {
+                items.append(("odom", encodeCDR(MessageBuilders.odometry(stampNs: stampNs, names: names, pose: pose))))
             }
+        }
+        // アプリ（ARFramePublisher）と同じ組み立て。anchor は姿勢を送る回にだけ載せる。
+        if poseDue, trackingState != .notAvailable, server.hasSubscribers("tf") {
+            let atS = Double(stampNs) / 1_000_000_000.0
+            let dueAnchors = anchorNames.enumerated()
+                .filter { anchorGate.shouldSend(name: $0.element, isTracked: true, atS: atS) }
+                .map { (imageName: $0.element, transform: fixedAnchorTransform(index: $0.offset)) }
+            let message = MessageBuilders.tfWithAnchors(stampNs: stampNs, names: names, pose: pose, anchors: dueAnchors)
+            items.append(("tf", encodeCDR(message)))
         }
 
         if FrameDecimator.shouldSend(frameIndex: index, divisor: colorDiv) {
@@ -555,6 +587,13 @@ final class SimulatedDevice: @unchecked Sendable {
 }
 
 private let sourceIntrinsics = Intrinsics(width: 1920, height: 1440, fx: 1500, fy: 1500, cx: 960, cy: 720)
+
+/// i 番目の参照画像。ARKit 座標で (0.5*i, 1, -2)、回転は単位。
+private func fixedAnchorTransform(index: Int) -> simd_double4x4 {
+    var transform = matrix_identity_double4x4
+    transform.columns.3 = SIMD4(0.5 * Double(index), 1.0, -2.0, 1.0)
+    return transform
+}
 
 private func cameraOnCircle(frameIndex: UInt64) -> simd_double4x4 {
     let theta = Double(frameIndex) * (2.0 * Double.pi / 1200.0)
