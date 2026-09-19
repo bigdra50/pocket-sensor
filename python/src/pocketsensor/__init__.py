@@ -15,6 +15,7 @@ from pocketsensor.errors import (
 from pocketsensor.frameset import FrameSet
 from pocketsensor.intrinsics import Intrinsics, deproject
 from pocketsensor.playback import PlaybackDevice
+from pocketsensor.stamp import rewrite_header_stamp
 from pocketsensor.streams import Battery, Color, Depth, Gnss, Imu, Mag, Pose, Pressure, Stream
 from pocketsensor.types import (
     BatteryStatus,
@@ -78,4 +79,5 @@ __all__ = [
     "deproject",
     "discover",
     "open",
+    "rewrite_header_stamp",
 ]
