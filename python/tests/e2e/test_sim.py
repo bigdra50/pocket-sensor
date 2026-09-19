@@ -214,8 +214,8 @@ def test_record_playback_and_info_cli(sim_device: str, tmp_path: Path) -> None:
     assert "pocketsensor.clock_samples" in metadata
     camera_topics = [
         channel_topic("color_image", name),
-        channel_topic("depth_image", name),
-        channel_topic("depth_confidence", name),
+        channel_topic("depth_image_compressed", name),
+        channel_topic("depth_confidence_compressed", name),
         channel_topic("odom", name),
     ]
     slowest = min(counts[topic] for topic in camera_topics)
