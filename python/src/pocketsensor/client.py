@@ -88,6 +88,15 @@ class FoxgloveClient:
         with self._lock:
             return self._server_info
 
+    @property
+    def closed(self) -> bool:
+        """接続が切れたか、close() を呼んだあとは True。
+
+        on_disconnect を後から付けた側が、付ける前に切れていなかったかを確かめるのに使う。
+        """
+        with self._lock:
+            return self._dead
+
     def wait_ready(self, timeout: float | None = None) -> ServerInfo:
         if not self._ready.wait(timeout):
             self._raise_if_dead()
