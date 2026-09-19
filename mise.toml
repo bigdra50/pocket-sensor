@@ -12,8 +12,12 @@ run = "uv run --project python python tools/gen_contract.py --check"
 description = "contract/vectors のテストベクトルを作り直す"
 run = "uv run --project python python tools/gen_vectors.py"
 
+[tasks."vectors:check"]
+description = "テストベクトルが生成器の出力と一致しているかを確かめる"
+run = "uv run --project python python tools/gen_vectors.py --check"
+
 [tasks."test:python"]
-description = "Python SDK のテスト"
+description = "Python SDK のテスト（E2E を除く）"
 dir = "{{config_root}}/python"
 run = "uv run pytest -q"
 
@@ -22,11 +26,30 @@ description = "Swift パッケージのテスト（macOS の上で走る）"
 dir = "{{config_root}}/ios/PocketSensorKit"
 run = "swift test"
 
-[tasks."lint:python"]
-description = "Python の lint と整形の検査"
+[tasks."build:sim"]
+description = "Swift の擬似デバイス pocketsensor-sim をビルドする"
+dir = "{{config_root}}/ios/PocketSensorKit"
+run = "swift build --product pocketsensor-sim"
+
+[tasks."test:e2e"]
+description = "Swift の擬似デバイスと Python SDK を通しで確かめる"
+depends = ["build:sim"]
 dir = "{{config_root}}/python"
-run = ["uv run ruff check .", "uv run ruff format --check ."]
+run = "uv run pytest -q -m e2e"
+
+[tasks."lint:python"]
+description = "Python の lint と整形の検査（SDK、ROS 2 の中継、例）"
+dir = "{{config_root}}/python"
+run = [
+  "uv run ruff check . ../ros2 ../examples",
+  "uv run ruff format --check . ../ros2 ../examples",
+]
+
+[tasks.sim]
+description = "擬似デバイスを 8765 番で起動する（Ctrl-C で止める）"
+dir = "{{config_root}}/ios/PocketSensorKit"
+run = "swift run pocketsensor-sim --port 8765"
 
 [tasks.test]
-description = "生成物の一致、Python、Swift のテストをまとめて走らせる"
-depends = ["gen:check", "test:python", "test:swift"]
+description = "生成物の一致、Python、Swift、E2E のテストをまとめて走らせる"
+depends = ["gen:check", "vectors:check", "test:python", "test:swift", "test:e2e"]
