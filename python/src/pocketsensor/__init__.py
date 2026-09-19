@@ -12,6 +12,7 @@ from pocketsensor.errors import (
     ProtocolError,
     Unsupported,
 )
+from pocketsensor.frames import relative_pose
 from pocketsensor.frameset import FrameSet
 from pocketsensor.intrinsics import Intrinsics, deproject
 from pocketsensor.playback import PlaybackDevice
@@ -82,5 +83,6 @@ __all__ = [
     "deproject",
     "discover",
     "open",
+    "relative_pose",
     "rewrite_header_stamp",
 ]

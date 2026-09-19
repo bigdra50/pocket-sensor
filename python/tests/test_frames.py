@@ -14,6 +14,7 @@ from pocketsensor.frames import (
     arkit_pose_to_rep103,
     matrix_to_quat,
     quat_to_matrix,
+    relative_pose,
     rpy_to_quaternion,
 )
 
@@ -87,3 +88,28 @@ def test_matrix_to_quat_handles_180_degree_rotation() -> None:
     back = matrix_to_quat(m)
     assert np.allclose(quat_to_matrix(back), m)
     assert back[3] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_relative_pose_expresses_the_child_in_the_parent_frame() -> None:
+    # 親は (1, 0, 0) にいて左へ 90° 向く。子は world の (1, 2, 0)、向きは world と同じ。
+    parent_q = rpy_to_quaternion(0.0, 0.0, math.pi / 2)
+    position, orientation = relative_pose(
+        np.array([1.0, 0.0, 0.0]), parent_q, np.array([1.0, 2.0, 0.0]), np.array([0.0, 0.0, 0.0, 1.0])
+    )
+    # 親から見ると、子は真正面の 2 m 先にあり、右へ 90° 向いている。
+    np.testing.assert_allclose(position, [2.0, 0.0, 0.0], atol=1e-12)
+    np.testing.assert_allclose(orientation, rpy_to_quaternion(0.0, 0.0, -math.pi / 2), atol=1e-12)
+
+
+def test_relative_pose_of_a_frame_to_itself_is_identity() -> None:
+    q = rpy_to_quaternion(0.3, -0.2, 1.1)
+    p = np.array([0.4, -1.2, 0.9])
+    position, orientation = relative_pose(p, q, p, q)
+    np.testing.assert_allclose(position, [0.0, 0.0, 0.0], atol=1e-12)
+    np.testing.assert_allclose(orientation, [0.0, 0.0, 0.0, 1.0], atol=1e-12)
+
+
+def test_relative_pose_is_part_of_the_public_api() -> None:
+    import pocketsensor as ps
+
+    assert ps.relative_pose is relative_pose

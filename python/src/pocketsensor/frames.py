@@ -92,6 +92,25 @@ def rpy_to_quaternion(roll: float, pitch: float, yaw: float) -> NDArray[np.float
     return matrix_to_quat(rz @ ry @ rx)
 
 
+def relative_pose(
+    parent_position: ArrayLike,
+    parent_orientation_xyzw: ArrayLike,
+    child_position: ArrayLike,
+    child_orientation_xyzw: ArrayLike,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """同じ frame で表した親と子の姿勢から、親の frame で見た子の位置と四元数を求める。
+
+    端末の姿勢（odom から link）と anchor（odom から anchor）を渡すと、端末から見た anchor になる。
+    2 つは同じ時刻のものを渡す。時刻がずれると、そのあいだの端末の動きが誤差として入る。
+    """
+    r_parent = quat_to_matrix(parent_orientation_xyzw)
+    r_child = quat_to_matrix(child_orientation_xyzw)
+    delta = np.asarray(child_position, dtype=np.float64).reshape(3) - np.asarray(
+        parent_position, dtype=np.float64
+    ).reshape(3)
+    return r_parent.T @ delta, matrix_to_quat(r_parent.T @ r_child)
+
+
 def arkit_pose_to_rep103(transform: ArrayLike) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """ARKit の camera-to-world（行優先 4x4）を REP-103 の位置と四元数にする。"""
     t = np.asarray(transform, dtype=np.float64).reshape(4, 4)
