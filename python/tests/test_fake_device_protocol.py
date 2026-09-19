@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 
 import pytest
@@ -105,3 +106,18 @@ def test_wire_time_applies_anchor() -> None:
         assert abs(t_wire - (wall + fake.clock_offset_ns)) < 50_000_000
         assert fake.expected_offset_ns == fake.anchor_ns + fake.clock_offset_ns
         assert abs(fake.device_now_ns() - (time.monotonic_ns() + fake.expected_offset_ns)) < 20_000_000
+
+
+def test_fake_device_can_stop_right_after_start_without_thread_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    errors: list[str] = []
+    monkeypatch.setattr(
+        threading, "excepthook", lambda args: errors.append(f"{args.thread.name}: {args.exc_value!r}")
+    )
+    # 待ち受けスレッドの起動と終了が競合するのは 1 回あたり 1 割ほど。60 回で取りこぼす確率は 0.2 % になる。
+    for _ in range(60):
+        with FakeDevice(port=0, seed=0):
+            pass
+    time.sleep(0.1)
+    assert errors == []

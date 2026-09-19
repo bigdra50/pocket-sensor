@@ -242,12 +242,21 @@ class FakeDevice:
             ping_timeout=None,
         )
         self._port = int(self._server.socket.getsockname()[1])
-        serve_thread = threading.Thread(target=self._server.serve_forever, name="fake-ws", daemon=True)
+        serve_thread = threading.Thread(target=self._serve, args=(self._server,), name="fake-ws", daemon=True)
         prod_thread = threading.Thread(target=self._produce, name="fake-prod", daemon=True)
         serve_thread.start()
         prod_thread.start()
         self._threads = [serve_thread, prod_thread]
         return self
+
+    def _serve(self, server: Server) -> None:
+        try:
+            server.serve_forever()
+        except OSError:
+            # websockets は待ち受けを始めた直後に socket の名前をログへ出す。
+            # その手前で __exit__ が socket を閉じると EBADF になるので、終了中に限って握りつぶす。
+            if not self._stop.is_set():
+                raise
 
     def __exit__(self, *args: object) -> None:
         self._stop.set()
