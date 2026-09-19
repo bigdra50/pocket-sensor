@@ -10,8 +10,10 @@ from websockets.exceptions import WebSocketException
 from websockets.sync.client import ClientConnection
 from websockets.sync.client import connect as ws_connect
 
+import pocketsensor.usbmux as usbmux
 from pocketsensor.errors import ConnectionFailed, Unsupported
 from pocketsensor.protocol import SUBPROTOCOLS
+from pocketsensor.usbmux import UsbmuxError, find_device, parse_usb_source
 
 Factory = Callable[[str, float | None], "Transport"]
 
@@ -33,7 +35,10 @@ class WebSocketTransport:
         self._conn = connection
         sock = getattr(connection, "socket", None)
         if sock is not None:
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            try:
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except OSError:
+                pass
 
     def send_text(self, text: str) -> None:
         self._conn.send(text)
@@ -93,3 +98,46 @@ def connect(source: str, timeout: float | None = None) -> Transport:
             except (OSError, TimeoutError) as exc:
                 raise ConnectionFailed(f"could not connect to {source}") from exc
     raise Unsupported(f"unsupported source: {source}")
+
+
+_USB_HINT = (
+    "could not connect over USB; check the cable, tap Trust this computer, "
+    "and keep the pocketsensor app in the foreground"
+)
+
+
+def _connect_usb(source: str, timeout: float | None) -> Transport:
+    try:
+        udid, port = parse_usb_source(source)
+    except ValueError as exc:
+        raise Unsupported(str(exc)) from exc
+    wait = 5.0 if timeout is None else timeout
+    try:
+        device = find_device(udid, socket_path=usbmux.DEFAULT_SOCKET_PATH, timeout=wait)
+        sock = usbmux.connect(device.device_id, port, socket_path=usbmux.DEFAULT_SOCKET_PATH, timeout=wait)
+    except UsbmuxError as exc:
+        raise ConnectionFailed(_USB_HINT) from exc
+    try:
+        conn = ws_connect(
+            f"ws://localhost:{port}",
+            sock=sock,
+            subprotocols=list(SUBPROTOCOLS),
+            compression=None,
+            max_size=None,
+            max_queue=None,
+            open_timeout=timeout,
+            legacy=True,
+            ping_interval=None,
+            ping_timeout=None,
+            proxy=None,
+        )
+    except (OSError, TimeoutError, WebSocketException) as exc:
+        try:
+            sock.close()
+        except OSError:
+            pass
+        raise ConnectionFailed(_USB_HINT) from exc
+    return WebSocketTransport(conn)
+
+
+register_source("usb:", _connect_usb)
