@@ -148,6 +148,22 @@ final class StatusPublisher: @unchecked Sendable {
                 encoding: "16UC1",
                 rate: rates.depth
             ),
+            "depth_image_compressed": DeviceStream(
+                topic: topic("depth_image_compressed"),
+                schema: "sensor_msgs/msg/CompressedImage",
+                width: rates.depthWidth,
+                height: rates.depthHeight,
+                encoding: MessageBuilders.compressedDepthFormat,
+                rate: rates.depth
+            ),
+            "depth_confidence_compressed": DeviceStream(
+                topic: topic("depth_confidence_compressed"),
+                schema: "sensor_msgs/msg/CompressedImage",
+                width: rates.depthWidth,
+                height: rates.depthHeight,
+                encoding: MessageBuilders.compressedConfidenceFormat,
+                rate: rates.depth
+            ),
             "imu": DeviceStream(topic: topic("imu"), schema: "sensor_msgs/msg/Imu", rate: rates.imu),
         ]
     }

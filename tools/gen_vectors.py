@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import io
 import json
 import math
 import sys
@@ -602,23 +604,115 @@ def generate_all() -> dict[Path, str]:
     }
 
 
+def png_cases_spec() -> list[dict[str, Any]]:
+    """小さな gray16 / gray8。0, 1, 255, 256, 65535 を必ず含める。"""
+    gray16 = [0, 1, 255, 256, 1000, 32767, 32768, 65535] * 4
+    gray8 = [0, 1, 2, 127, 128, 254, 255, 3] * 4
+    return [
+        {
+            "name": "gray16_8x4",
+            "kind": "gray16",
+            "width": 8,
+            "height": 4,
+            "pixels": gray16,
+        },
+        {
+            "name": "gray8_8x4",
+            "kind": "gray8",
+            "width": 8,
+            "height": 4,
+            "pixels": gray8,
+        },
+    ]
+
+
+def encode_png_case(kind: str, width: int, height: int, pixels: list[int]) -> bytes:
+    from PIL import Image
+
+    dtype = np.uint16 if kind == "gray16" else np.uint8
+    arr = np.asarray(pixels, dtype=dtype).reshape((height, width))
+    buf = io.BytesIO()
+    Image.fromarray(arr).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def decode_png_pixels(png: bytes, kind: str) -> list[int]:
+    from PIL import Image
+
+    image = Image.open(io.BytesIO(png))
+    arr = np.asarray(image)
+    dtype = np.uint16 if kind == "gray16" else np.uint8
+    return [int(v) for v in np.asarray(arr, dtype=dtype).reshape(-1).tolist()]
+
+
+def png_json_is_valid(path: Path) -> bool:
+    """PNG バイトは zlib の版で変わりうるので、復号結果だけを見る。"""
+    spec = {row["name"]: row for row in png_cases_spec()}
+    if not path.exists():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    cases = payload.get("cases")
+    if not isinstance(cases, list):
+        return False
+    names = [case.get("name") for case in cases]
+    if names != [row["name"] for row in png_cases_spec()]:
+        return False
+    for case in cases:
+        expected = spec[str(case["name"])]
+        if case.get("kind") != expected["kind"]:
+            return False
+        if case.get("width") != expected["width"] or case.get("height") != expected["height"]:
+            return False
+        if case.get("pixels") != expected["pixels"]:
+            return False
+        try:
+            png = base64.b64decode(case["png_b64"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        try:
+            decoded = decode_png_pixels(png, expected["kind"])
+        except Exception:
+            return False
+        if decoded != expected["pixels"]:
+            return False
+    return True
+
+
+def write_png_json() -> None:
+    path = VECTORS / "png.json"
+    if png_json_is_valid(path):
+        return
+    cases = []
+    for row in png_cases_spec():
+        png = encode_png_case(row["kind"], row["width"], row["height"], row["pixels"])
+        cases.append({**row, "png_b64": base64.b64encode(png).decode("ascii")})
+    path.write_text(render({"cases": cases}), encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Write golden vectors under contract/vectors/")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
     files = generate_all()
+    png_path = VECTORS / "png.json"
     if args.check:
         differed = []
         for path, content in files.items():
             existing = path.read_text(encoding="utf-8") if path.exists() else None
             if existing != content:
                 differed.append(path)
+        if not png_json_is_valid(png_path):
+            differed.append(png_path)
         for path in differed:
             print(path.relative_to(REPO_ROOT))
         return 1 if differed else 0
     VECTORS.mkdir(parents=True, exist_ok=True)
     for path, content in files.items():
         path.write_text(content, encoding="utf-8")
+    write_png_json()
     return 0
 
 

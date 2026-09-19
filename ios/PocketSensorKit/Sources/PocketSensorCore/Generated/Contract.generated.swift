@@ -283,6 +283,34 @@ public enum Contract {
             stage: 1
         ),
         ChannelSpec(
+            key: "depth_image_compressed",
+            topic: "/<name>/depth/image/compressedDepth",
+            schema: "sensor_msgs/msg/CompressedImage",
+            frameId: "<name>_color_optical_frame",
+            childFrameId: nil,
+            rateParam: "depth.rate",
+            rateHz: nil,
+            backpressure: .latest,
+            queueSeconds: nil,
+            group: "arframe",
+            latched: false,
+            stage: 1
+        ),
+        ChannelSpec(
+            key: "depth_confidence_compressed",
+            topic: "/<name>/depth/confidence/compressed",
+            schema: "sensor_msgs/msg/CompressedImage",
+            frameId: "<name>_color_optical_frame",
+            childFrameId: nil,
+            rateParam: "depth.rate",
+            rateHz: nil,
+            backpressure: .latest,
+            queueSeconds: nil,
+            group: "arframe",
+            latched: false,
+            stage: 1
+        ),
+        ChannelSpec(
             key: "imu_raw",
             topic: "/<name>/imu/data_raw",
             schema: "sensor_msgs/msg/Imu",

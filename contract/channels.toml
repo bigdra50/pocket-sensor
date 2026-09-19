@@ -115,6 +115,30 @@ group = "arframe"
 latched = false
 stage = 1
 
+# 深度と confidence の可逆圧縮（PNG）。中身は無圧縮のチャンネルと同じで、受け手が購読で選ぶ。
+# トピック名と format は image_transport の compressedDepth と compressed の作法に合わせる。
+[[channel]]
+key = "depth_image_compressed"
+topic = "/<name>/depth/image/compressedDepth"
+schema = "sensor_msgs/msg/CompressedImage"
+frame_id = "<name>_color_optical_frame"
+rate_param = "depth.rate"
+backpressure = "latest"
+group = "arframe"
+latched = false
+stage = 1
+
+[[channel]]
+key = "depth_confidence_compressed"
+topic = "/<name>/depth/confidence/compressed"
+schema = "sensor_msgs/msg/CompressedImage"
+frame_id = "<name>_color_optical_frame"
+rate_param = "depth.rate"
+backpressure = "latest"
+group = "arframe"
+latched = false
+stage = 1
+
 [[channel]]
 key = "imu_raw"
 topic = "/<name>/imu/data_raw"

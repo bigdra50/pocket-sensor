@@ -363,40 +363,58 @@ final class SimulatedDevice: @unchecked Sendable {
         items: inout [(String, Data)]
     ) {
         let wantDepth = server.hasSubscribers("depth_image")
+        let wantDepthPNG = server.hasSubscribers("depth_image_compressed")
         let wantConf = server.hasSubscribers("depth_confidence")
+        let wantConfPNG = server.hasSubscribers("depth_confidence_compressed")
         let wantInfo = server.hasSubscribers("depth_camera_info")
-        guard wantDepth || wantConf || wantInfo else { return }
+        guard wantDepth || wantDepthPNG || wantConf || wantConfPNG || wantInfo else { return }
         let depthK = sourceIntrinsics.scaled(toWidth: 256, height: 192)
         if wantInfo {
             items.append(("depth_camera_info", encodeCDR(MessageBuilders.cameraInfo(stampNs: stampNs, names: names, intrinsics: depthK))))
         }
-        if wantDepth, let buffer = depthBuffer {
+        if (wantDepth || wantDepthPNG), let buffer = depthBuffer {
             paintDepth(buffer, frameIndex: frameIndex)
             if let packed = DepthPacker.depth16(from: buffer) {
-                items.append((
-                    "depth_image",
-                    encodeCDR(MessageBuilders.depthImage(
-                        stampNs: stampNs,
-                        names: names,
-                        width: packed.width,
-                        height: packed.height,
-                        data: packed.data
+                if wantDepth {
+                    items.append((
+                        "depth_image",
+                        encodeCDR(MessageBuilders.depthImage(
+                            stampNs: stampNs,
+                            names: names,
+                            width: packed.width,
+                            height: packed.height,
+                            data: packed.data
+                        ))
                     ))
-                ))
+                }
+                if wantDepthPNG, let png = PNGEncoder.gray16(width: packed.width, height: packed.height, pixels: packed.data) {
+                    items.append((
+                        "depth_image_compressed",
+                        encodeCDR(MessageBuilders.compressedDepth(stampNs: stampNs, names: names, png: png))
+                    ))
+                }
             }
         }
-        if wantConf, let buffer = confidenceBuffer {
+        if (wantConf || wantConfPNG), let buffer = confidenceBuffer {
             if let packed = DepthPacker.confidence8(from: buffer) {
-                items.append((
-                    "depth_confidence",
-                    encodeCDR(MessageBuilders.confidenceImage(
-                        stampNs: stampNs,
-                        names: names,
-                        width: packed.width,
-                        height: packed.height,
-                        data: packed.data
+                if wantConf {
+                    items.append((
+                        "depth_confidence",
+                        encodeCDR(MessageBuilders.confidenceImage(
+                            stampNs: stampNs,
+                            names: names,
+                            width: packed.width,
+                            height: packed.height,
+                            data: packed.data
+                        ))
                     ))
-                ))
+                }
+                if wantConfPNG, let png = PNGEncoder.gray8(width: packed.width, height: packed.height, pixels: packed.data) {
+                    items.append((
+                        "depth_confidence_compressed",
+                        encodeCDR(MessageBuilders.compressedConfidence(stampNs: stampNs, names: names, png: png))
+                    ))
+                }
             }
         }
     }
@@ -576,6 +594,22 @@ final class SimulatedDevice: @unchecked Sendable {
                 width: 256,
                 height: 192,
                 encoding: "16UC1",
+                rate: rates.depth
+            ),
+            "depth_image_compressed": DeviceStream(
+                topic: names.topic(Contract.channels.first { $0.key == "depth_image_compressed" }!),
+                schema: "sensor_msgs/msg/CompressedImage",
+                width: 256,
+                height: 192,
+                encoding: MessageBuilders.compressedDepthFormat,
+                rate: rates.depth
+            ),
+            "depth_confidence_compressed": DeviceStream(
+                topic: names.topic(Contract.channels.first { $0.key == "depth_confidence_compressed" }!),
+                schema: "sensor_msgs/msg/CompressedImage",
+                width: 256,
+                height: 192,
+                encoding: MessageBuilders.compressedConfidenceFormat,
                 rate: rates.depth
             ),
             "imu": DeviceStream(

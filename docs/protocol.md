@@ -73,6 +73,8 @@ frame の定義は [frames-and-units.md](frames-and-units.md) にある。
 | `/<name>/depth/image` | `sensor_msgs/msg/Image`（`16UC1`） | `<name>_color_optical_frame` | 15 Hz |
 | `/<name>/depth/confidence` | `sensor_msgs/msg/Image`（`mono8`） | `<name>_color_optical_frame` | 深度と同じ |
 | `/<name>/depth/camera_info` | `sensor_msgs/msg/CameraInfo` | `<name>_color_optical_frame` | 深度と同じ |
+| `/<name>/depth/image/compressedDepth` | `sensor_msgs/msg/CompressedImage`（PNG） | `<name>_color_optical_frame` | 深度と同じ |
+| `/<name>/depth/confidence/compressed` | `sensor_msgs/msg/CompressedImage`（PNG） | `<name>_color_optical_frame` | 深度と同じ |
 | `/<name>/imu/data_raw` | `sensor_msgs/msg/Imu` | `<name>_imu_link` | 100 Hz |
 | `/<name>/imu/data` | `sensor_msgs/msg/Imu` | `<name>_imu_link` | 100 Hz |
 | `/<name>/imu/mag` | `sensor_msgs/msg/MagneticField` | `<name>_imu_link` | 50 Hz |
@@ -92,6 +94,28 @@ frame の定義は [frames-and-units.md](frames-and-units.md) にある。
 換算の式は [frames-and-units.md](frames-and-units.md) にある。
 
 `confidence` の画素値は、ARKit の `ARConfidenceLevel` のとおり 0（低）、1（中）、2（高）である。
+
+### 深度の可逆圧縮
+
+深度と confidence は、無圧縮のチャンネルと、PNG で可逆圧縮したチャンネルの 2 通りで出す。
+中身は同じで、受け手が購読で選ぶ。
+端末は、購読されたほうだけを符号化する。
+
+| チャンネル | `format` | `data` |
+| --- | --- | --- |
+| `depth/image/compressedDepth` | `16UC1; compressedDepth png` | 12 バイトのヘッダに続けて、16 bit のグレースケールの PNG |
+| `depth/confidence/compressed` | `mono8; png compressed `（末尾に空白が 1 つ） | 8 bit のグレースケールの PNG |
+
+トピック名、`format` の文字列、12 バイトのヘッダは、ROS の `image_transport` の `compressedDepth` と `compressed` に合わせた。
+ROS 2 の側は、`image_transport` の `republish` で `sensor_msgs/Image` へ戻せる。
+ヘッダは `int32` の 0（`INV_DEPTH`）と `float32` の 0 が 2 つで、どれも little endian である。
+`16UC1` の深度では、復号する側はこのヘッダの値を使わず、読み飛ばすだけである。
+
+無圧縮の深度と confidence は、15 Hz で毎秒 2.2 MB になる。
+WiFi では最新 1 件を保持する背圧のチャンネルが 1 割ほど捨てられており、この 2 つが帯域の大半を占めていた。
+測定は [research/on-device-measurements.md](research/on-device-measurements.md) にある。
+受け手 SDK は、端末が広告していれば圧縮のほうを購読する。
+表示ツールで深度を色付きで見たいときは、無圧縮の `depth/image` を購読する。
 
 ### 追跡の状態
 

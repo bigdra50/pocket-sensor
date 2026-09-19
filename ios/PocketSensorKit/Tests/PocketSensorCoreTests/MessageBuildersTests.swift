@@ -223,6 +223,23 @@ final class MessageBuildersTests: XCTestCase {
         XCTAssertEqual(info.roi.width, 0)
     }
 
+    func testCompressedDepthAndConfidenceFormats() {
+        let png = Data([0x89, 0x50, 0x4E, 0x47])
+        let depth = MessageBuilders.compressedDepth(stampNs: stampNs, names: names, png: png)
+        XCTAssertEqual(depth.format, "16UC1; compressedDepth png")
+        XCTAssertEqual(depth.header.frameId, "phone_color_optical_frame")
+        XCTAssertEqual(depth.header.stamp.sec, 1)
+        XCTAssertEqual(depth.header.stamp.nanosec, 2)
+        XCTAssertEqual(Array(depth.data.prefix(12)), Array(repeating: UInt8(0), count: 12))
+        XCTAssertEqual(Data(depth.data.dropFirst(12)), png)
+
+        let conf = MessageBuilders.compressedConfidence(stampNs: stampNs, names: names, png: png)
+        XCTAssertEqual(conf.format, "mono8; png compressed ")
+        XCTAssertEqual(conf.format.last, " ")
+        XCTAssertEqual(conf.header.frameId, "phone_color_optical_frame")
+        XCTAssertEqual(conf.data, png)
+    }
+
     func testTimeReferenceAndString() {
         let tr = MessageBuilders.timeReference(stampNs: stampNs, wallTimeNs: 9_000_000_007, source: "cllocation")
         XCTAssertEqual(tr.header.frameId, "")

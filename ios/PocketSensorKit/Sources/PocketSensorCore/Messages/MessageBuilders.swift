@@ -165,6 +165,30 @@ public enum MessageBuilders {
         )
     }
 
+    /// image_transport の compressedDepth。ヘッダ 12 バイトは INV_DEPTH=0 と depth=0, 0。
+    public static let compressedDepthFormat = "16UC1; compressedDepth png"
+
+    /// 末尾の空白は upstream のリテラル。
+    public static let compressedConfidenceFormat = "mono8; png compressed "
+
+    public static func compressedDepth(stampNs: UInt64, names: FrameNames, png: Data) -> SensorMsgs.CompressedImage {
+        var data = Data(count: 12)
+        data.append(png)
+        return SensorMsgs.CompressedImage(
+            header: WireStamp.header(stampNs: stampNs, frameId: names.colorOptical),
+            format: compressedDepthFormat,
+            data: data
+        )
+    }
+
+    public static func compressedConfidence(stampNs: UInt64, names: FrameNames, png: Data) -> SensorMsgs.CompressedImage {
+        SensorMsgs.CompressedImage(
+            header: WireStamp.header(stampNs: stampNs, frameId: names.colorOptical),
+            format: compressedConfidenceFormat,
+            data: png
+        )
+    }
+
     public static func depthImage(stampNs: UInt64, names: FrameNames, width: Int, height: Int, data: Data) -> SensorMsgs.Image {
         SensorMsgs.Image(
             header: WireStamp.header(stampNs: stampNs, frameId: names.colorOptical),

@@ -160,9 +160,11 @@ final class ARFramePublisher: @unchecked Sendable {
         items: inout [(String, Data)]
     ) {
         let wantDepth = runtime.server.hasSubscribers("depth_image")
+        let wantDepthPNG = runtime.server.hasSubscribers("depth_image_compressed")
         let wantConf = runtime.server.hasSubscribers("depth_confidence")
+        let wantConfPNG = runtime.server.hasSubscribers("depth_confidence_compressed")
         let wantInfo = runtime.server.hasSubscribers("depth_camera_info")
-        guard wantDepth || wantConf || wantInfo else { return }
+        guard wantDepth || wantDepthPNG || wantConf || wantConfPNG || wantInfo else { return }
         let depthW = sample.depthMap.map { CVPixelBufferGetWidth($0) } ?? 0
         let depthH = sample.depthMap.map { CVPixelBufferGetHeight($0) } ?? 0
         guard depthW > 0, depthH > 0 else { return }
@@ -171,29 +173,45 @@ final class ARFramePublisher: @unchecked Sendable {
             let depthK = colorK.scaled(toWidth: depthW, height: depthH)
             items.append(("depth_camera_info", encodeCDR(MessageBuilders.cameraInfo(stampNs: stampNs, names: names, intrinsics: depthK))))
         }
-        if wantDepth, let buffer = sample.depthMap, let packed = DepthPacker.depth16(from: buffer) {
-            items.append((
-                "depth_image",
-                encodeCDR(MessageBuilders.depthImage(
-                    stampNs: stampNs,
-                    names: names,
-                    width: packed.width,
-                    height: packed.height,
-                    data: packed.data
+        if (wantDepth || wantDepthPNG), let buffer = sample.depthMap, let packed = DepthPacker.depth16(from: buffer) {
+            if wantDepth {
+                items.append((
+                    "depth_image",
+                    encodeCDR(MessageBuilders.depthImage(
+                        stampNs: stampNs,
+                        names: names,
+                        width: packed.width,
+                        height: packed.height,
+                        data: packed.data
+                    ))
                 ))
-            ))
+            }
+            if wantDepthPNG, let png = PNGEncoder.gray16(width: packed.width, height: packed.height, pixels: packed.data) {
+                items.append((
+                    "depth_image_compressed",
+                    encodeCDR(MessageBuilders.compressedDepth(stampNs: stampNs, names: names, png: png))
+                ))
+            }
         }
-        if wantConf, let buffer = sample.confidenceMap, let packed = DepthPacker.confidence8(from: buffer) {
-            items.append((
-                "depth_confidence",
-                encodeCDR(MessageBuilders.confidenceImage(
-                    stampNs: stampNs,
-                    names: names,
-                    width: packed.width,
-                    height: packed.height,
-                    data: packed.data
+        if (wantConf || wantConfPNG), let buffer = sample.confidenceMap, let packed = DepthPacker.confidence8(from: buffer) {
+            if wantConf {
+                items.append((
+                    "depth_confidence",
+                    encodeCDR(MessageBuilders.confidenceImage(
+                        stampNs: stampNs,
+                        names: names,
+                        width: packed.width,
+                        height: packed.height,
+                        data: packed.data
+                    ))
                 ))
-            ))
+            }
+            if wantConfPNG, let png = PNGEncoder.gray8(width: packed.width, height: packed.height, pixels: packed.data) {
+                items.append((
+                    "depth_confidence_compressed",
+                    encodeCDR(MessageBuilders.compressedConfidence(stampNs: stampNs, names: names, png: png))
+                ))
+            }
         }
     }
 }
