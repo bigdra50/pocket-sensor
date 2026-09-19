@@ -1,9 +1,17 @@
 # XcodeGen の定義。`xcodegen generate` で PocketSensor.xcodeproj を作る（生成物は git 管理外）。
-# DEVELOPMENT_TEAM は個人の Personal Team。別アカウントで開くときは Xcode の
-# Signing & Capabilities で差し替えるか、下の値を書き換えて generate し直す。
+# 署名に使うチームはここへ書かない。チーム ID は開発者ごとに違い、リポジトリへ残す値ではないためである。
+# 実機へ入れるときは、このディレクトリに Local.xcconfig（git 管理外）を作って次の 1 行を書く。
+#   DEVELOPMENT_TEAM = <自分のチーム ID>
+# Local.xcconfig が無くても generate と署名なしのビルドは通る。
 name: PocketSensor
+configFiles:
+  Debug: Local.xcconfig
+  Release: Local.xcconfig
 options:
   bundleIdPrefix: io.github.bigdra50
+  # Local.xcconfig は任意なので、無いことを generate のエラーにしない
+  disabledValidations:
+    - missingConfigFiles
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -15,9 +23,11 @@ settings:
     SWIFT_STRICT_CONCURRENCY: minimal
     TARGETED_DEVICE_FAMILY: "1"
     CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: ML46C5PYU7
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+packages:
+  PocketSensorKit:
+    path: ../PocketSensorKit
 targets:
   PocketSensor:
     type: application
@@ -27,6 +37,13 @@ targets:
         excludes:
           - Info.plist
       - path: Assets.xcassets
+    dependencies:
+      - package: PocketSensorKit
+        product: PocketSensorCore
+      - package: PocketSensorKit
+        product: PocketSensorServer
+      - package: PocketSensorKit
+        product: PocketSensorMedia
     info:
       path: Sources/Info.plist
       properties:
@@ -61,6 +78,8 @@ targets:
       - Tests
     dependencies:
       - target: PocketSensor
+      - package: PocketSensorKit
+        product: PocketSensorCore
     settings:
       base:
         # テストバンドルは Info.plist を持たないので自動生成させる。無いと署名段階で

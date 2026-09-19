@@ -4,3 +4,4 @@ Sources/Info.plist
 xcuserdata/
 DerivedData/
 build/
+Local.xcconfig
