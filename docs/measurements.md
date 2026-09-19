@@ -143,10 +143,47 @@ parameters と services も、実機で動作を確かめた。
 `color.rate` を 15 から 5 へ変えると、実測のレートは 16.0 Hz から 5.5 Hz へ下がった。
 `reset_origin` を呼ぶと `origin_epoch` が 1 へ増え、姿勢が原点へ戻った。
 
+## 表示ツールの側のクライアントでの確認
+
+Lichtblick と Foxglove が内部で使うパッケージ（`@foxglove/ws-protocol`、`@foxglove/rosmsg`、`@foxglove/rosmsg2-serialization`）で、実機へ接続した。
+検査のスクリプトは `tools/foxglove-client-check/` にある。
+
+| 項目 | 結果 |
+| --- | --- |
+| 接続と `serverInfo` | `foxglove.websocket.v1` でつながり、`cdr` と 3 つの capability が広告された |
+| スキーマの解析 | 広告された 18 チャンネルのすべてで、`ros2msg` のスキーマを解析できた |
+| メッセージの復号 | GNSS を除く 16 チャンネルで、8 秒のあいだに届いた全メッセージを復号できた |
+| `header.stamp` | どのチャンネルでも、メッセージに付いた時刻と一致した |
+| `clock_sync` | `t1` がそのまま返り、`t2` は `t3` より後にならなかった |
+| parameters | 読み出しと、`color.rate` の書き換えができた |
+
+GNSS の 2 チャンネルには、何も届かなかった。
+`/diagnostics` の `pocketsensor/gnss` は `not_determined` を示しており、位置情報の許可のダイアログに答えていないことが原因だった。
+
+## WiFi での破棄
+
+全チャンネルを購読した状態の `/diagnostics` は、次の値を示した。
+熱の状態は nominal だった。
+
+| チャンネル | 設定のレート | 送った実績 | 背圧で捨てた数（セッションの開始からの累計） |
+| --- | --- | --- | --- |
+| 姿勢、`tracking`、`/tf` | 30 Hz | 27.0 Hz | 60 |
+| 深度、confidence、`depth/camera_info` | 15 Hz | 14.0 Hz | 20 |
+| RGB、`color/camera_info` | 6.7 Hz（`color.rate` は 7） | 5.5 Hz | 24 |
+| IMU（融合値と生値） | 100 Hz | 99.5 Hz | 0 |
+| 地磁気 | 50 Hz | 49.5 Hz | 0 |
+
+最新 1 件を保持する背圧のチャンネルだけが、設定より 1 割ほど低い。
+送り終わる前に次のフレームが来て、古いほうが捨てられている。
+上限付きのキューを使う IMU は、欠けていない。
+無圧縮の深度と confidence が合わせて毎秒 2.2 MB あり、WiFi ではこれが帯域の大半を占める。
+
 ## 測っていないもの
 
 - 端末を動かしたときの `odom` の軸の向き（前へ動かして x が増えるか）
 - 端末を回したときの `imu/data` の yaw の符号
 - 深度を RGB へ重ねたときの、輪郭の一致
 - USB（usbmux）経由での配信。測定のあいだ、USB の接続が安定しなかった
-- Lichtblick と Foxglove からの直接の接続
+- Lichtblick と Foxglove の画面での表示。両者が使うクライアントでの復号までは確かめた
+- 位置情報を許可した状態での GNSS
+- 参照画像の anchor。軸の向きは ARKit の定義から導いたもので、実機では見ていない
