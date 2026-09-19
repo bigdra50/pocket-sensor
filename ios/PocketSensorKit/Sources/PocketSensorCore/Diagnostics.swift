@@ -16,6 +16,7 @@ public struct DiagnosticsInput: Equatable, Sendable {
     public var clients: Int
     public var ratesHz: [String: Double]
     public var drops: [String: Int]
+    public var encodeSkips: [String: Int]
     public var clock: ClockCheckStatus
     public var magCalibration: MagCalibration
 
@@ -27,6 +28,7 @@ public struct DiagnosticsInput: Equatable, Sendable {
         clients: Int,
         ratesHz: [String: Double],
         drops: [String: Int],
+        encodeSkips: [String: Int] = [:],
         clock: ClockCheckStatus,
         magCalibration: MagCalibration
     ) {
@@ -37,6 +39,7 @@ public struct DiagnosticsInput: Equatable, Sendable {
         self.clients = clients
         self.ratesHz = ratesHz
         self.drops = drops
+        self.encodeSkips = encodeSkips
         self.clock = clock
         self.magCalibration = magCalibration
     }
@@ -108,6 +111,9 @@ public enum Diagnostics {
         }
         for key in input.drops.keys.sorted() {
             values.append(("drops.\(key)", String(input.drops[key] ?? 0)))
+        }
+        for key in input.encodeSkips.keys.sorted() {
+            values.append(("encode_skips.\(key)", String(input.encodeSkips[key] ?? 0)))
         }
         let dropTotal = input.drops.values.reduce(0, +)
         let level = dropTotal > 0 ? DiagnosticMsgs.DiagnosticStatus.warn : DiagnosticMsgs.DiagnosticStatus.ok

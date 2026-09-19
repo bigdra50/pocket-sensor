@@ -120,6 +120,54 @@ final class OutboxTests: XCTestCase {
         XCTAssertEqual(box.next()?.payload, Data([2]))
     }
 
+    func testSameStampOfferBatchMergesWaitingAndCurrent() {
+        var box = Outbox()
+        box.offerBatch(group: "arframe", items: [item(1, 10, 1), item(2, 10, 2)])
+        box.offerBatch(group: "arframe", items: [item(3, 10, 3)])
+        XCTAssertNil(box.drops[1])
+        XCTAssertNil(box.drops[2])
+        XCTAssertNil(box.drops[3])
+        XCTAssertEqual(box.next()?.payload, Data([1]))
+        box.completed()
+        XCTAssertEqual(box.next()?.payload, Data([2]))
+        box.completed()
+        XCTAssertEqual(box.next()?.payload, Data([3]))
+        box.completed()
+        XCTAssertTrue(box.isIdle)
+    }
+
+    func testSameStampAppendsToCurrentBatchWhileSending() {
+        var box = Outbox()
+        box.offerBatch(group: "arframe", items: [item(1, 10, 1), item(2, 10, 2)])
+        XCTAssertEqual(box.next()?.payload, Data([1]))
+        box.offerBatch(group: "arframe", items: [item(3, 10, 3)])
+        XCTAssertNil(box.drops[3])
+        box.completed()
+        XCTAssertEqual(box.next()?.payload, Data([2]))
+        box.completed()
+        XCTAssertEqual(box.next()?.payload, Data([3]))
+        box.completed()
+        XCTAssertTrue(box.isIdle)
+    }
+
+    func testNewerStampStillReplacesWaitingBatch() {
+        var box = Outbox()
+        box.offerBatch(group: "arframe", items: [item(1, 10, 1)])
+        box.offerBatch(group: "arframe", items: [item(1, 20, 2)])
+        XCTAssertEqual(box.drops[1], 1)
+        XCTAssertEqual(box.next()?.payload, Data([2]))
+    }
+
+    func testOlderStampDoesNotReplaceWaitingBatch() {
+        var box = Outbox()
+        box.offerBatch(group: "arframe", items: [item(1, 20, 2)])
+        box.offerBatch(group: "arframe", items: [item(1, 10, 1)])
+        XCTAssertEqual(box.drops[1], 1)
+        XCTAssertEqual(box.next()?.payload, Data([2]))
+        box.completed()
+        XCTAssertTrue(box.isIdle)
+    }
+
     func testOutOfOrderQueueSampleDoesNotFlush() {
         var box = Outbox()
         box.offerQueue(item(1, 1000, 1), maxAgeNs: 100)

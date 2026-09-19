@@ -33,6 +33,24 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertEqual(array.status[0].values.first { $0.key == "state" }?.value, "1")
     }
 
+    func testEncodeSkipsAppearInStreamsValues() {
+        let input = DiagnosticsInput(
+            deviceName: "phone",
+            trackingState: .normal,
+            trackingReason: .none,
+            thermal: .nominal,
+            clients: 1,
+            ratesHz: [:],
+            drops: [:],
+            encodeSkips: ["color": 4],
+            clock: .ok,
+            magCalibration: .high
+        )
+        let array = Diagnostics.build(stampNs: 0, input: input)
+        let streams = array.status.first { $0.name == "pocketsensor/streams" }
+        XCTAssertEqual(streams?.values.first { $0.key == "encode_skips.color" }?.value, "4")
+    }
+
     func testOkLevels() {
         let input = DiagnosticsInput(
             deviceName: "phone",

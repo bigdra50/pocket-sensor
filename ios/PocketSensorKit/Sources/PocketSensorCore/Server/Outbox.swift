@@ -20,6 +20,8 @@ public struct Outbox: Equatable, Sendable {
     private var queues: [UInt32: [OutboundItem]] = [:]
     private var latest: [UInt32: OutboundItem] = [:]
     private var currentBatch: [OutboundItem] = []
+    private var currentBatchGroup: String?
+    private var currentBatchStamp: UInt64?
     private var waitingBatches: [String: [OutboundItem]] = [:]
     private var inFlight = false
     public private(set) var drops: [UInt32: Int] = [:]
@@ -68,11 +70,28 @@ public struct Outbox: Equatable, Sendable {
 
     public mutating func offerBatch(group: String, items: [OutboundItem]) {
         guard !items.isEmpty else { return }
-        // 待ちは group ごと。別 group を載せるときに落とすと、まだ送っていない組が消える。
-        if let previous = waitingBatches[group] {
-            for dropped in previous {
+        let stamp = items[0].timestampNs
+        // 同じ stamp の color を後から足す。新しい stamp だけが待ちを置き換える。
+        if currentBatchGroup == group, currentBatchStamp == stamp, inFlight || !currentBatch.isEmpty {
+            currentBatch.append(contentsOf: items)
+            return
+        }
+        if let previous = waitingBatches[group], let previousStamp = previous.first?.timestampNs {
+            if previousStamp == stamp {
+                waitingBatches[group] = previous + items
+                return
+            }
+            if stamp > previousStamp {
+                for dropped in previous {
+                    countDrop(dropped)
+                }
+                waitingBatches[group] = items
+                return
+            }
+            for dropped in items {
                 countDrop(dropped)
             }
+            return
         }
         waitingBatches[group] = items
     }
@@ -89,6 +108,10 @@ public struct Outbox: Equatable, Sendable {
 
     public mutating func completed() {
         inFlight = false
+        if currentBatch.isEmpty {
+            currentBatchGroup = nil
+            currentBatchStamp = nil
+        }
     }
 
     private mutating func take(_ item: OutboundItem) -> OutboundItem {
@@ -151,6 +174,8 @@ public struct Outbox: Equatable, Sendable {
         }
         guard let group = bestGroup, let items = waitingBatches.removeValue(forKey: group) else { return false }
         currentBatch = items
+        currentBatchGroup = group
+        currentBatchStamp = items.first?.timestampNs
         return !currentBatch.isEmpty
     }
 
