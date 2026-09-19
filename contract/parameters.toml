@@ -1,0 +1,75 @@
+# parameters の表。意図の説明は docs/protocol.md にある。
+#
+# type は number、boolean、string のいずれか。
+# writable が false のものは、setParameters を受けても値を変えない。
+# number には min と max を付け、範囲の外の値は端へ丸める。
+# string に choices があれば、それ以外の値を受け付けない。
+
+[[parameter]]
+name = "pose.rate"
+type = "number"
+default = 30.0
+min = 1.0
+max = 60.0
+writable = true
+description = "姿勢、tracking、/tf のレートの上限（Hz）"
+
+[[parameter]]
+name = "color.rate"
+type = "number"
+default = 15.0
+min = 1.0
+max = 60.0
+writable = true
+description = "RGB のレートの上限（Hz）"
+
+[[parameter]]
+name = "color.width"
+type = "number"
+default = 960.0
+min = 160.0
+max = 1920.0
+writable = true
+description = "送る画像の幅（画素）。高さは縦横比から決まる"
+
+[[parameter]]
+name = "color.jpeg_quality"
+type = "number"
+default = 0.8
+min = 0.1
+max = 1.0
+writable = true
+description = "JPEG の品質（0 から 1）"
+
+[[parameter]]
+name = "depth.rate"
+type = "number"
+default = 15.0
+min = 1.0
+max = 60.0
+writable = true
+description = "深度と confidence のレートの上限（Hz）"
+
+[[parameter]]
+name = "imu.rate"
+type = "number"
+default = 100.0
+min = 1.0
+max = 100.0
+writable = true
+description = "IMU のレート（Hz）。端末の上限を超える値は上限へ丸める"
+
+[[parameter]]
+name = "imu.reference_frame"
+type = "string"
+default = "arbitrary"
+choices = ["arbitrary", "true_north"]
+writable = true
+description = "imu/data の向きの基準"
+
+[[parameter]]
+name = "device.name"
+type = "string"
+default = "pocketsensor"
+writable = false
+description = "端末の名前。トピック名と frame 名の前に付く。変更はアプリの画面でする"

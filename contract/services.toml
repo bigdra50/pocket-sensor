@@ -1,0 +1,16 @@
+# services の表。意図の説明は docs/protocol.md にある。
+#
+# name の <name> は、端末の名前で置き換える。
+# 要求と応答の encoding は cdr、schemaEncoding は ros2msg である。
+
+[[service]]
+key = "clock_sync"
+name = "/<name>/clock_sync"
+type = "pocketsensor_msgs/srv/ClockSync"
+stage = 1
+
+[[service]]
+key = "reset_origin"
+name = "/<name>/reset_origin"
+type = "std_srvs/srv/Trigger"
+stage = 1

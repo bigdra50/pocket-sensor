@@ -1,0 +1,225 @@
+# チャンネルの表。意図の説明は docs/protocol.md にある。
+#
+# topic と frame_id の <name> は、端末の名前（parameters の device.name）で置き換える。
+# encoding はすべて cdr、schemaEncoding はすべて ros2msg なので、表には持たない。
+#
+# backpressure
+#   latest  接続ごとに最新の 1 件だけを持つ。送信中に次が来たら置き換える
+#   queue   queue_seconds ぶんまでのキュー。あふれたら古いものから捨てる
+#   keep    捨てない
+# group
+#   同じ値を持つ latest のチャンネルは、同じ ARFrame から作ったメッセージをまとめて置き換える
+# latched
+#   true なら、購読を受けた直後に最新の 1 件を送る
+# rate_param
+#   レートの上限を決める parameter の名前。無いものは、センサーが出す間隔か rate_hz の固定値で流す
+# stage
+#   1 は最初の段階、2 は次の段階（docs/protocol.md の「次の段階で足すチャンネル」）
+
+[[channel]]
+key = "odom"
+topic = "/<name>/odom"
+schema = "nav_msgs/msg/Odometry"
+frame_id = "<name>_odom"
+child_frame_id = "<name>_link"
+rate_param = "pose.rate"
+backpressure = "latest"
+group = "arframe"
+latched = false
+stage = 1
+
+[[channel]]
+key = "tracking"
+topic = "/<name>/tracking"
+schema = "pocketsensor_msgs/msg/TrackingStatus"
+frame_id = "<name>_link"
+rate_param = "pose.rate"
+backpressure = "latest"
+group = "arframe"
+latched = false
+stage = 1
+
+[[channel]]
+key = "tf"
+topic = "/tf"
+schema = "tf2_msgs/msg/TFMessage"
+frame_id = "<name>_odom"
+child_frame_id = "<name>_link"
+rate_param = "pose.rate"
+backpressure = "latest"
+group = "arframe"
+latched = false
+stage = 1
+
+[[channel]]
+key = "tf_static"
+topic = "/tf_static"
+schema = "tf2_msgs/msg/TFMessage"
+frame_id = "<name>_link"
+backpressure = "keep"
+latched = true
+stage = 1
+
+[[channel]]
+key = "color_image"
+topic = "/<name>/color/image/compressed"
+schema = "sensor_msgs/msg/CompressedImage"
+frame_id = "<name>_color_optical_frame"
+rate_param = "color.rate"
+backpressure = "latest"
+group = "arframe"
+latched = false
+stage = 1
+
+[[channel]]
+key = "color_camera_info"
+topic = "/<name>/color/camera_info"
+schema = "sensor_msgs/msg/CameraInfo"
+frame_id = "<name>_color_optical_frame"
+rate_param = "color.rate"
+backpressure = "latest"
+group = "arframe"
+latched = false
+stage = 1
+
+[[channel]]
+key = "depth_image"
+topic = "/<name>/depth/image"
+schema = "sensor_msgs/msg/Image"
+frame_id = "<name>_color_optical_frame"
+rate_param = "depth.rate"
+backpressure = "latest"
+group = "arframe"
+latched = false
+stage = 1
+
+[[channel]]
+key = "depth_confidence"
+topic = "/<name>/depth/confidence"
+schema = "sensor_msgs/msg/Image"
+frame_id = "<name>_color_optical_frame"
+rate_param = "depth.rate"
+backpressure = "latest"
+group = "arframe"
+latched = false
+stage = 1
+
+[[channel]]
+key = "depth_camera_info"
+topic = "/<name>/depth/camera_info"
+schema = "sensor_msgs/msg/CameraInfo"
+frame_id = "<name>_color_optical_frame"
+rate_param = "depth.rate"
+backpressure = "latest"
+group = "arframe"
+latched = false
+stage = 1
+
+[[channel]]
+key = "imu_raw"
+topic = "/<name>/imu/data_raw"
+schema = "sensor_msgs/msg/Imu"
+frame_id = "<name>_imu_link"
+rate_param = "imu.rate"
+backpressure = "queue"
+queue_seconds = 1.0
+latched = false
+stage = 1
+
+[[channel]]
+key = "imu"
+topic = "/<name>/imu/data"
+schema = "sensor_msgs/msg/Imu"
+frame_id = "<name>_imu_link"
+rate_param = "imu.rate"
+backpressure = "queue"
+queue_seconds = 1.0
+latched = false
+stage = 1
+
+[[channel]]
+key = "mag"
+topic = "/<name>/imu/mag"
+schema = "sensor_msgs/msg/MagneticField"
+frame_id = "<name>_imu_link"
+rate_hz = 50.0
+backpressure = "queue"
+queue_seconds = 1.0
+latched = false
+stage = 1
+
+[[channel]]
+key = "pressure"
+topic = "/<name>/pressure"
+schema = "sensor_msgs/msg/FluidPressure"
+frame_id = "<name>_link"
+backpressure = "keep"
+latched = false
+stage = 1
+
+[[channel]]
+key = "gnss_fix"
+topic = "/<name>/gnss/fix"
+schema = "sensor_msgs/msg/NavSatFix"
+frame_id = "<name>_link"
+backpressure = "keep"
+latched = false
+stage = 1
+
+[[channel]]
+key = "gnss_time_reference"
+topic = "/<name>/gnss/time_reference"
+schema = "sensor_msgs/msg/TimeReference"
+frame_id = ""
+backpressure = "keep"
+latched = false
+stage = 1
+
+[[channel]]
+key = "battery"
+topic = "/<name>/battery"
+schema = "sensor_msgs/msg/BatteryState"
+frame_id = ""
+rate_hz = 1.0
+backpressure = "keep"
+latched = false
+stage = 1
+
+[[channel]]
+key = "device_info"
+topic = "/<name>/device_info"
+schema = "std_msgs/msg/String"
+frame_id = ""
+backpressure = "keep"
+latched = true
+stage = 1
+
+[[channel]]
+key = "diagnostics"
+topic = "/diagnostics"
+schema = "diagnostic_msgs/msg/DiagnosticArray"
+frame_id = ""
+rate_hz = 1.0
+backpressure = "keep"
+latched = false
+stage = 1
+
+[[channel]]
+key = "gnss_vel"
+topic = "/<name>/gnss/vel"
+schema = "geometry_msgs/msg/TwistStamped"
+frame_id = "<name>_link"
+backpressure = "keep"
+latched = false
+stage = 2
+
+[[channel]]
+key = "mag_raw"
+topic = "/<name>/imu/mag_raw"
+schema = "sensor_msgs/msg/MagneticField"
+frame_id = "<name>_imu_link"
+rate_hz = 50.0
+backpressure = "queue"
+queue_seconds = 1.0
+latched = false
+stage = 2
