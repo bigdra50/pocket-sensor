@@ -16,8 +16,9 @@ from pocketsensor.frameset import FrameSet
 from pocketsensor.intrinsics import Intrinsics, deproject
 from pocketsensor.playback import PlaybackDevice
 from pocketsensor.stamp import rewrite_header_stamp
-from pocketsensor.streams import Battery, Color, Depth, Gnss, Imu, Mag, Pose, Pressure, Stream
+from pocketsensor.streams import Anchors, Battery, Color, Depth, Gnss, Imu, Mag, Pose, Pressure, Stream
 from pocketsensor.types import (
+    AnchorSample,
     BatteryStatus,
     ColorFrame,
     ConfidenceFrame,
@@ -36,6 +37,8 @@ from pocketsensor.types import (
 __version__ = "0.1.0"
 
 __all__ = [
+    "AnchorSample",
+    "Anchors",
     "Battery",
     "BatteryStatus",
     "Calibration",

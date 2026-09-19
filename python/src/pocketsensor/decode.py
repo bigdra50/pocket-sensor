@@ -12,6 +12,7 @@ from numpy.typing import NDArray
 from pocketsensor.errors import ProtocolError, Unsupported
 from pocketsensor.intrinsics import Intrinsics
 from pocketsensor.types import (
+    AnchorSample,
     BatteryStatus,
     ColorFrame,
     ConfidenceFrame,
@@ -140,6 +141,34 @@ def decode_pose(msg: Any) -> PoseSample:
         child_frame_id=str(msg.child_frame_id),
         covariance=np.asarray(msg.pose.covariance, dtype=np.float64).reshape(36).copy(),
     )
+
+
+def decode_anchors(tf_msg: Any, device_name: str) -> list[AnchorSample]:
+    """TFMessage から、この端末の参照画像 anchor だけを拾う。順序はメッセージのとおり。"""
+    prefix = f"{device_name}_anchor_"
+    parent = f"{device_name}_odom"
+    out: list[AnchorSample] = []
+    for tf in tf_msg.transforms:
+        if str(tf.header.frame_id) != parent:
+            continue
+        child = str(tf.child_frame_id)
+        if not child.startswith(prefix):
+            continue
+        name = child[len(prefix) :]
+        if not name:
+            continue
+        out.append(
+            AnchorSample(
+                name=name,
+                t_device_ns=stamp_to_ns(tf.header.stamp),
+                position=_vec3(tf.transform.translation),
+                # 符号は端末が揃えて送る（w >= 0）。姿勢と同じく、受け手では作り変えない。
+                orientation_xyzw=_quat(tf.transform.rotation),
+                frame_id=parent,
+                child_frame_id=child,
+            )
+        )
+    return out
 
 
 def decode_tracking(msg: Any) -> TrackingStatus:

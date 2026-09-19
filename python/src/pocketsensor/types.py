@@ -35,6 +35,16 @@ class PoseSample:
 
 
 @dataclass(frozen=True)
+class AnchorSample:
+    name: str
+    t_device_ns: int
+    position: NDArray[np.float64]
+    orientation_xyzw: NDArray[np.float64]
+    frame_id: str
+    child_frame_id: str
+
+
+@dataclass(frozen=True)
 class TrackingStatus:
     state: int
     reason: int

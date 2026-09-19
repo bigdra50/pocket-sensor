@@ -116,6 +116,26 @@ GNSS、気圧、電池のような低いレートのデータは、`dev.gnss.lat
 すべてのメッセージを順に受け取りたい利用者には、`dev.messages(topics)` を用意する。
 トピック名、計測時刻、復号済みのメッセージを順に返す、低い層の API である。
 
+## 参照画像の anchor
+
+`Config.streams` へ `ps.Anchors()` を足すと、端末が追跡している参照画像の位置と姿勢を読める。
+`dev.anchors.latest()` は、画像の名前から `AnchorSample` への辞書を返す。
+
+| `AnchorSample` の項目 | 内容 |
+| --- | --- |
+| `name` | 参照画像の名前 |
+| `t_device_ns` | 検出したフレームの計測時刻 |
+| `position`、`orientation_xyzw` | `<name>_odom` から見た anchor の位置（m）と姿勢 |
+| `frame_id`、`child_frame_id` | `<name>_odom` と `<name>_anchor_<画像の名前>` |
+
+端末は、追跡しているあいだだけ 0.5 秒おきに anchor を送る。
+追跡が外れると何も届かなくなるので、`latest()` は 1.5 秒より前に届いたものを返さない。
+この長さは `latest(max_age_s=...)` で変えられ、`None` を渡すと古いものも返す。
+
+anchor はフレームの組へ入れない。
+レートが違ううえ、画像が映っていないあいだは届かないためである。
+同じフレームの姿勢と組にしたいときは、`t_device_ns` が `FrameSet` の計測時刻と一致するものを選ぶ。
+
 ## 時刻
 
 1 つのデータは 3 種類の時刻を持つ。

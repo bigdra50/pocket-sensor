@@ -13,6 +13,7 @@ class Stream(Enum):
     DEPTH = "depth"
     CONFIDENCE = "confidence"
     POSE = "pose"
+    ANCHORS = "anchors"
     IMU = "imu"
     IMU_RAW = "imu_raw"
     MAG = "mag"
@@ -111,6 +112,21 @@ class Pose:
 
 
 @dataclass(frozen=True)
+class Anchors:
+    """FrameSet の組には入れない。レートが違い、未検出のあいだは届かない。"""
+
+    @property
+    def stream(self) -> Stream:
+        return Stream.ANCHORS
+
+    def channel_keys(self) -> tuple[str, ...]:
+        return ("tf",)
+
+    def parameters(self) -> dict[str, float | int]:
+        return {}
+
+
+@dataclass(frozen=True)
 class Imu:
     rate: float | None = None
     raw: bool = False
@@ -182,7 +198,7 @@ class Battery:
         return {}
 
 
-StreamSpec = Color | Depth | Pose | Imu | Mag | Pressure | Gnss | Battery
+StreamSpec = Color | Depth | Pose | Anchors | Imu | Mag | Pressure | Gnss | Battery
 
 RATE_PARAM_BY_STREAM: dict[Stream, str] = {
     Stream.POSE: "pose.rate",

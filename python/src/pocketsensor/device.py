@@ -18,6 +18,7 @@ from pocketsensor.client import FoxgloveClient
 from pocketsensor.clock import ClockEstimator, ClockSample, ClockView
 from pocketsensor.config import Config
 from pocketsensor.decode import (
+    decode_anchors,
     decode_battery,
     decode_camera_info,
     decode_color,
@@ -45,6 +46,7 @@ from pocketsensor.streams import (
 )
 from pocketsensor.transport import connect
 from pocketsensor.types import (
+    AnchorSample,
     BatteryStatus,
     DeviceInfo,
     GnssFix,
@@ -95,6 +97,15 @@ class _Latest:
     def latest(self) -> Any:
         self._device._raise_if_dead()
         return self._slot.get()
+
+
+class _AnchorsView:
+    def __init__(self, device: Device) -> None:
+        self._device = device
+
+    def latest(self, max_age_s: float | None = 1.5) -> dict[str, AnchorSample]:
+        self._device._raise_if_dead()
+        return self._device._anchors_latest(max_age_s)
 
 
 class Device:
@@ -152,6 +163,11 @@ class Device:
         self._gnss: LatestValue[GnssFix] = LatestValue()
         self._battery: LatestValue[BatteryStatus] = LatestValue()
         self._gnss_time_ref: dict[int, int] = {}
+        self._anchors_enabled = any(spec.stream is Stream.ANCHORS for spec in config.streams)
+        self._anchor_samples: dict[str, tuple[AnchorSample, int]] = {}
+        self._anchor_origin_epoch: int | None = None
+        self._playback_now_ns = 0
+        self._anchors_view = _AnchorsView(self)
         self._stats = DeviceStats()
         self._pending_sets: deque[FrameSet] = deque()
         self._frame_cv = threading.Condition(self._lock)
@@ -166,6 +182,12 @@ class Device:
         self.pressure = _Latest(self, self._pressure)
         self.gnss = _Latest(self, self._gnss)
         self.battery = _Latest(self, self._battery)
+
+    @property
+    def anchors(self) -> _AnchorsView:
+        if not self._anchors_enabled:
+            raise Unsupported("Anchors stream is not configured")
+        return self._anchors_view
 
     @classmethod
     def connect(cls, source: str, config: Config) -> Device:
@@ -360,7 +382,11 @@ class Device:
             f"/{self._name}/reset_origin", payload, timeout=self._config.open_timeout
         )
         resp = self._codec.decode("std_srvs/srv/Trigger_Response", raw)
-        return bool(resp.success), str(resp.message)
+        success = bool(resp.success)
+        if success and self._anchors_enabled:
+            with self._lock:
+                self._anchor_samples.clear()
+        return success, str(resp.message)
 
     def record(self, path: str | Path) -> Any:
         self._require_live()
@@ -427,6 +453,8 @@ class Device:
         with self._lock:
             received = self._stats.received_messages.get(channel.topic, 0) + 1
             self._stats.received_messages[channel.topic] = received
+            if self._playback:
+                self._playback_now_ns = int(log_time_ns)
             taps = list(self._raw_taps)
             if channel.topic == "/tf_static" or channel.topic.endswith("/device_info"):
                 self._latched_raw[channel.topic] = (channel, log_time_ns, payload)
@@ -516,8 +544,23 @@ class Device:
         if key == "odom":
             self._offer(Stream.POSE, t_ns, decode_pose(msg), arrival)
             return
+        if key == "tf":
+            if self._anchors_enabled:
+                samples = decode_anchors(msg, self._name)
+                with self._lock:
+                    arrived = int(arrival)
+                    for sample in samples:
+                        self._anchor_samples[sample.name] = (sample, arrived)
+            return
         if key == "tracking":
-            self._offer("tracking", t_ns, decode_tracking(msg), arrival)
+            status = decode_tracking(msg)
+            if self._anchors_enabled:
+                with self._lock:
+                    epoch = int(status.origin_epoch)
+                    if self._anchor_origin_epoch is not None and epoch != self._anchor_origin_epoch:
+                        self._anchor_samples.clear()
+                    self._anchor_origin_epoch = epoch
+            self._offer("tracking", t_ns, status, arrival)
             return
         if key == "imu":
             with self._lock:
@@ -576,6 +619,22 @@ class Device:
                 else:
                     self._pending_sets.append(frames)
                 self._frame_cv.notify()
+
+    def _anchors_latest(self, max_age_s: float | None) -> dict[str, AnchorSample]:
+        with self._lock:
+            items = dict(self._anchor_samples)
+            playback = self._playback
+            now = self._playback_now_ns if playback else time.monotonic_ns()
+        out: dict[str, AnchorSample] = {}
+        max_age_ns = None if max_age_s is None else int(max_age_s * 1_000_000_000)
+        for name, (sample, arrival_ns) in items.items():
+            if max_age_ns is not None:
+                # 再生の ingest は到着時刻を 0 にするので、端末時刻で古さを見る。
+                age = now - sample.t_device_ns if playback else now - arrival_ns
+                if age > max_age_ns:
+                    continue
+            out[name] = sample
+        return out
 
 
 def open(source: str, config: Config | None = None, *, realtime: bool = True) -> Device:

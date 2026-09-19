@@ -12,6 +12,7 @@ import threading
 import time
 import uuid
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -52,6 +53,7 @@ _STREAM_KEYS: dict[Stream, tuple[str, ...]] = {
     Stream.DEPTH: ("depth_image", "depth_camera_info", "depth_confidence"),
     Stream.CONFIDENCE: ("depth_confidence",),
     Stream.POSE: ("odom", "tf", "tracking"),
+    Stream.ANCHORS: ("tf",),
     Stream.IMU: ("imu",),
     Stream.IMU_RAW: ("imu_raw",),
     Stream.MAG: ("mag",),
@@ -120,6 +122,8 @@ class FakeDevice:
         self.clock_drift_ppm = 0.0
         self.distortion_model = "plumb_bob"
         self.distortion: tuple[float, ...] = (0.0, 0.0, 0.0, 0.0, 0.0)
+        self.anchors: dict[str, tuple[Sequence[float], Sequence[float]]] = {}
+        self._anchor_last_ns: dict[str, int] = {}
         self._drop_members: set[str] = set()
         self._stall_until = 0.0
         self._params: dict[str, Any] = {str(row["name"]): row["default"] for row in PARAMETERS}
@@ -552,20 +556,47 @@ class FakeDevice:
             twist={"covariance": twist_cov},
         )
         self._broadcast("odom", t_wire, self._codec.encode("nav_msgs/msg/Odometry", odom))
-        tf = self._codec.make(
-            "tf2_msgs/msg/TFMessage",
-            transforms=[
+        pose_transform = {
+            "header": header,
+            "child_frame_id": f"{self.name}_link",
+            "transform": {
+                "translation": {"x": x, "y": y, "z": 0.0},
+                "rotation": _quat_dict(q),
+            },
+        }
+        # 実機と同じく、anchor は姿勢の変換の後ろへ載せる。/tf が anchor だけになることは無い。
+        transforms = [pose_transform, *self._due_anchor_transforms(t_wire, header)]
+        tf = self._codec.make("tf2_msgs/msg/TFMessage", transforms=transforms)
+        self._broadcast("tf", t_wire, self._codec.encode("tf2_msgs/msg/TFMessage", tf))
+
+    def _due_anchor_transforms(self, t_wire: int, header: dict[str, Any]) -> list[dict[str, Any]]:
+        # アプリと同じく、名前ごとに端末時刻 0.5 秒に 1 回を上限にする。
+        current = dict(self.anchors)
+        if not current:
+            return []
+        interval_ns = 500_000_000
+        out: list[dict[str, Any]] = []
+        for name, (pos, quat) in current.items():
+            last = self._anchor_last_ns.get(name)
+            if last is not None and t_wire - last < interval_ns:
+                continue
+            self._anchor_last_ns[name] = t_wire
+            out.append(
                 {
                     "header": header,
-                    "child_frame_id": f"{self.name}_link",
+                    "child_frame_id": f"{self.name}_anchor_{name}",
                     "transform": {
-                        "translation": {"x": x, "y": y, "z": 0.0},
-                        "rotation": _quat_dict(q),
+                        "translation": {"x": float(pos[0]), "y": float(pos[1]), "z": float(pos[2])},
+                        "rotation": {
+                            "x": float(quat[0]),
+                            "y": float(quat[1]),
+                            "z": float(quat[2]),
+                            "w": float(quat[3]),
+                        },
                     },
                 }
-            ],
-        )
-        self._broadcast("tf", t_wire, self._codec.encode("tf2_msgs/msg/TFMessage", tf))
+            )
+        return out
 
     def _color_size(self) -> tuple[int, int]:
         width = int(self._params["color.width"])
