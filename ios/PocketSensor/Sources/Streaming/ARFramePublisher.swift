@@ -1,0 +1,210 @@
+import CoreVideo
+import Foundation
+import PocketSensorCore
+import PocketSensorMedia
+import PocketSensorServer
+
+/// 1 枚の ARFrame を同じ stampNs の publishBatch にする。JPEG だけ別キュー。
+final class ARFramePublisher: @unchecked Sendable {
+    private let runtime: StreamingRuntime
+    private var gate = AnchorGate()
+    private let gateLock = NSLock()
+
+    init(runtime: StreamingRuntime) {
+        self.runtime = runtime
+    }
+
+    func resetGates() {
+        gateLock.lock()
+        gate.reset()
+        gateLock.unlock()
+    }
+
+    func publish(_ sample: ARFrameSample) {
+        guard !runtime.isStopped else { return }
+        runtime.noteClock(arframe: ClockSelfCheck.evaluate(
+            sampleTimestampS: sample.timestamp,
+            arrivalMonoS: sample.arrivalMediaTime
+        ))
+        let mapped = StreamingMap.tracking(sample.trackingState)
+        runtime.setTracking(mapped)
+
+        let srcW = max(1, Int(sample.imageResolution.width.rounded()))
+        let srcH = max(1, Int(sample.imageResolution.height.rounded()))
+        var depthW: Int?
+        var depthH: Int?
+        if let depth = sample.depthMap {
+            depthW = CVPixelBufferGetWidth(depth)
+            depthH = CVPixelBufferGetHeight(depth)
+        }
+        runtime.setSourceSize(colorWidth: srcW, colorHeight: srcH, depthWidth: depthW, depthHeight: depthH)
+
+        let rates = runtime.rates()
+        let stampNs = runtime.anchor.wireTime(sensorSeconds: sample.timestamp)
+        let names = FrameNames(deviceName: rates.name)
+        let index = sample.index &- 1
+        let poseDiv = FrameDecimator.divisor(rateLimitHz: rates.pose, thermal: rates.thermal)
+        let colorDiv = FrameDecimator.divisor(rateLimitHz: rates.color, thermal: rates.thermal)
+        let depthDiv = FrameDecimator.divisor(rateLimitHz: rates.depth, thermal: rates.thermal)
+        let poseDue = FrameDecimator.shouldSend(frameIndex: index, divisor: poseDiv)
+        let colorDue = FrameDecimator.shouldSend(frameIndex: index, divisor: colorDiv)
+        let depthDue = FrameDecimator.shouldSend(frameIndex: index, divisor: depthDiv)
+        let trackingAvailable = mapped.state != .notAvailable
+        let pose = PoseInput(
+            cameraTransform: StreamingMap.poseMatrix(sample.cameraTransform),
+            state: mapped.state,
+            reason: mapped.reason,
+            originEpoch: rates.epoch
+        )
+
+        var items: [(String, Data)] = []
+        if poseDue {
+            if runtime.server.hasSubscribers("tracking") {
+                items.append(("tracking", encodeCDR(MessageBuilders.tracking(stampNs: stampNs, names: names, pose: pose))))
+            }
+            if trackingAvailable, runtime.server.hasSubscribers("odom") {
+                items.append(("odom", encodeCDR(MessageBuilders.odometry(stampNs: stampNs, names: names, pose: pose))))
+            }
+        }
+
+        if trackingAvailable, runtime.server.hasSubscribers("tf") {
+            var transforms: [GeometryMsgs.TransformStamped] = []
+            if poseDue {
+                transforms.append(contentsOf: MessageBuilders.tf(stampNs: stampNs, names: names, pose: pose).transforms)
+            }
+            gateLock.lock()
+            for anchor in sample.imageAnchors {
+                if gate.shouldSend(name: anchor.name, isTracked: anchor.isTracked, atS: sample.timestamp) {
+                    transforms.append(contentsOf: MessageBuilders.anchorTF(
+                        stampNs: stampNs,
+                        names: names,
+                        imageName: anchor.name,
+                        anchorTransform: StreamingMap.poseMatrix(anchor.transform)
+                    ).transforms)
+                }
+            }
+            gateLock.unlock()
+            if !transforms.isEmpty {
+                items.append(("tf", encodeCDR(Tf2Msgs.TFMessage(transforms: transforms))))
+            }
+        }
+
+        if colorDue {
+            scheduleColor(sample: sample, stampNs: stampNs, names: names, rates: rates, sourceWidth: srcW, sourceHeight: srcH)
+        }
+        if depthDue {
+            appendDepth(sample: sample, stampNs: stampNs, names: names, sourceWidth: srcW, sourceHeight: srcH, items: &items)
+        }
+        guard !items.isEmpty else { return }
+        runtime.server.publishBatch(group: "arframe", stampNs: stampNs, items: items)
+    }
+
+    private func scheduleColor(
+        sample: ARFrameSample,
+        stampNs: UInt64,
+        names: FrameNames,
+        rates: SessionRates,
+        sourceWidth: Int,
+        sourceHeight: Int
+    ) {
+        let wantImage = runtime.server.hasSubscribers("color_image")
+        let wantInfo = runtime.server.hasSubscribers("color_camera_info")
+        guard wantImage || wantInfo else { return }
+        let colorK = StreamingMap.colorIntrinsics(matrix: sample.intrinsics, width: sourceWidth, height: sourceHeight)
+        if !wantImage {
+            let size = JPEGEncoder.targetSize(sourceWidth: sourceWidth, sourceHeight: sourceHeight, targetWidth: Int(rates.width))
+            let width = size?.width ?? Int(rates.width)
+            let height = size?.height ?? Int((Double(sourceHeight) * Double(width) / Double(max(sourceWidth, 1))).rounded())
+            let scaled = colorK.scaled(toWidth: width, height: height)
+            runtime.server.publishBatch(
+                group: "arframe",
+                stampNs: stampNs,
+                items: [("color_camera_info", encodeCDR(MessageBuilders.cameraInfo(stampNs: stampNs, names: names, intrinsics: scaled)))]
+            )
+            return
+        }
+        guard runtime.beginColorEncode() else { return }
+        let buffer = sample.capturedImage
+        runtime.encodeQueue.async { [weak self] in
+            self?.encodeColor(
+                buffer: buffer,
+                stampNs: stampNs,
+                names: names,
+                rates: rates,
+                colorK: colorK,
+                wantInfo: wantInfo
+            )
+        }
+    }
+
+    private func encodeColor(
+        buffer: CVPixelBuffer,
+        stampNs: UInt64,
+        names: FrameNames,
+        rates: SessionRates,
+        colorK: Intrinsics,
+        wantInfo: Bool
+    ) {
+        defer { runtime.endColorEncode() }
+        guard !runtime.isStopped else { return }
+        let encoded = runtime.jpeg.encode(pixelBuffer: buffer, targetWidth: Int(rates.width), quality: rates.quality)
+        var items: [(String, Data)] = []
+        let width = encoded?.width ?? Int(rates.width)
+        let height = encoded?.height ?? Int((Double(colorK.height) * Double(width) / Double(max(colorK.width, 1))).rounded())
+        if wantInfo {
+            let scaled = colorK.scaled(toWidth: width, height: height)
+            items.append(("color_camera_info", encodeCDR(MessageBuilders.cameraInfo(stampNs: stampNs, names: names, intrinsics: scaled))))
+        }
+        if let encoded {
+            items.append(("color_image", encodeCDR(MessageBuilders.compressedImage(stampNs: stampNs, names: names, jpeg: encoded.data))))
+        }
+        guard !items.isEmpty else { return }
+        runtime.server.publishBatch(group: "arframe", stampNs: stampNs, items: items)
+    }
+
+    private func appendDepth(
+        sample: ARFrameSample,
+        stampNs: UInt64,
+        names: FrameNames,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        items: inout [(String, Data)]
+    ) {
+        let wantDepth = runtime.server.hasSubscribers("depth_image")
+        let wantConf = runtime.server.hasSubscribers("depth_confidence")
+        let wantInfo = runtime.server.hasSubscribers("depth_camera_info")
+        guard wantDepth || wantConf || wantInfo else { return }
+        let depthW = sample.depthMap.map { CVPixelBufferGetWidth($0) } ?? 0
+        let depthH = sample.depthMap.map { CVPixelBufferGetHeight($0) } ?? 0
+        guard depthW > 0, depthH > 0 else { return }
+        if wantInfo {
+            let colorK = StreamingMap.colorIntrinsics(matrix: sample.intrinsics, width: sourceWidth, height: sourceHeight)
+            let depthK = colorK.scaled(toWidth: depthW, height: depthH)
+            items.append(("depth_camera_info", encodeCDR(MessageBuilders.cameraInfo(stampNs: stampNs, names: names, intrinsics: depthK))))
+        }
+        if wantDepth, let buffer = sample.depthMap, let packed = DepthPacker.depth16(from: buffer) {
+            items.append((
+                "depth_image",
+                encodeCDR(MessageBuilders.depthImage(
+                    stampNs: stampNs,
+                    names: names,
+                    width: packed.width,
+                    height: packed.height,
+                    data: packed.data
+                ))
+            ))
+        }
+        if wantConf, let buffer = sample.confidenceMap, let packed = DepthPacker.confidence8(from: buffer) {
+            items.append((
+                "depth_confidence",
+                encodeCDR(MessageBuilders.confidenceImage(
+                    stampNs: stampNs,
+                    names: names,
+                    width: packed.width,
+                    height: packed.height,
+                    data: packed.data
+                ))
+            ))
+        }
+    }
+}

@@ -1,15 +1,19 @@
 import CoreMotion
 import Foundation
+import PocketSensorCore
 import QuartzCore
 import simd
 import UIKit
 
-/// ARKit と Core Motion などの capture を持ち、画面用の状態を出す。
-/// この段階では配信サーバーは繋がない。
+/// ARKit と Core Motion などの capture を持ち、前面セッションを配信サーバーへ繋ぐ。
 @MainActor
 final class AppController: ObservableObject {
     @Published private(set) var tracking = "unavailable"
     @Published private(set) var deliveredFps = 0.0
+    @Published private(set) var poseHz = 0.0
+    @Published private(set) var colorHz = 0.0
+    @Published private(set) var depthHz = 0.0
+    @Published private(set) var imuHz = 0.0
     @Published private(set) var originEpoch = 0
     @Published private(set) var depthCenterM: Float?
     @Published private(set) var thermal = ProcessInfo.processInfo.thermalState.wireName
@@ -19,17 +23,25 @@ final class AppController: ObservableObject {
     @Published private(set) var position: SIMD3<Float>?
     @Published private(set) var orientation: simd_quatf?
     @Published private(set) var arkitSupported = ARKitCapture.isSupported
+    @Published private(set) var serverState = "stopped"
+    @Published private(set) var serverPort: UInt16?
+    @Published private(set) var clients = 0
+    @Published private(set) var deviceName = DeviceName.defaultValue
+    @Published private(set) var linkAddresses: [LinkAddresses.Record] = []
 
     let arkit = ARKitCapture()
     let motion = MotionCapture()
     let location = LocationCapture()
     let battery = BatteryCapture()
     let thermalMonitor = ThermalMonitor()
+    let nameStore = DeviceNameStore()
 
+    private var session: StreamingSession?
     private var probe: Probe?
     private var statusTimer: Timer?
     private var didStart = false
     private var previewEnabled = false
+    private let probeMode = ProcessInfo.processInfo.arguments.contains("-PocketSensorProbe")
     private let statsLock = NSLock()
     private var lastTracking = "unavailable"
     private var lastDepthCenter: Float?
@@ -37,7 +49,8 @@ final class AppController: ObservableObject {
     private var lastDepthSummaryAt: TimeInterval = 0
 
     init() {
-        if ProcessInfo.processInfo.arguments.contains("-PocketSensorProbe") {
+        deviceName = nameStore.load()
+        if probeMode {
             start()
         }
     }
@@ -45,22 +58,40 @@ final class AppController: ObservableObject {
     func start() {
         guard !didStart else { return }
         didStart = true
+        UIApplication.shared.isIdleTimerDisabled = true
 
         arkit.onFrame { [weak self] sample in
+            self?.session?.handleFrame(sample)
             self?.handleFrame(sample)
         }
+        motion.onAccel { [weak self] sample in
+            self?.session?.handleAccel(sample)
+        }
+        motion.onGyro { [weak self] sample in
+            self?.session?.handleGyro(sample)
+        }
+        motion.onDeviceMotion { [weak self] sample in
+            self?.session?.handleDeviceMotion(sample)
+        }
+        motion.onAltimeter { [weak self] sample in
+            self?.session?.handleAltimeter(sample)
+        }
+        location.onLocation { [weak self] sample in
+            self?.session?.handleLocation(sample)
+        }
         battery.onSample { [weak self] sample in
+            self?.session?.handleBattery(sample)
             DispatchQueue.main.async {
                 self?.applyBattery(sample)
             }
         }
         thermalMonitor.onChange { [weak self] state in
+            self?.session?.handleThermal(state)
             DispatchQueue.main.async {
                 self?.thermal = state.wireName
             }
         }
 
-        let probeMode = ProcessInfo.processInfo.arguments.contains("-PocketSensorProbe")
         // Probe は callback を購読するだけ。ARKit と IMU の start はここが一度だけ行う。
         // 購読を先に付けてから start しないと、最初のフレームが rates 窓から落ちる。
         if probeMode {
@@ -70,12 +101,14 @@ final class AppController: ObservableObject {
         }
 
         thermalMonitor.start()
-        battery.start()
         if probeMode {
+            battery.start()
             motion.start(rateHz: 100, referenceFrame: .xArbitraryCorrectedZVertical)
-        }
-        if arkitSupported {
-            arkit.start(reset: false)
+            if arkitSupported {
+                arkit.start(reset: false)
+            }
+        } else {
+            enterForeground()
         }
 
         statusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -83,9 +116,69 @@ final class AppController: ObservableObject {
         }
     }
 
+    func enterForeground() {
+        guard didStart, !probeMode else { return }
+        guard session == nil else { return }
+        UIApplication.shared.isIdleTimerDisabled = true
+        let session = StreamingSession(
+            deviceName: deviceName,
+            arkit: arkit,
+            motion: motion,
+            location: location,
+            battery: battery,
+            thermal: thermalMonitor.current
+        )
+        session.onServerState = { [weak self] state, port in
+            DispatchQueue.main.async {
+                self?.serverState = state
+                self?.serverPort = port
+            }
+        }
+        session.onClientCount = { [weak self] count in
+            DispatchQueue.main.async {
+                self?.clients = count
+            }
+        }
+        session.onOriginEpoch = { [weak self] epoch in
+            DispatchQueue.main.async {
+                self?.originEpoch = Int(epoch)
+            }
+        }
+        self.session = session
+        originEpoch = 0
+        session.start()
+    }
+
+    func enterBackground() {
+        guard didStart, !probeMode else { return }
+        session?.stop()
+        session = nil
+        serverState = "stopped"
+        serverPort = nil
+        clients = 0
+        UIApplication.shared.isIdleTimerDisabled = false
+    }
+
     func resetOrigin() {
-        originEpoch += 1
-        arkit.resetOrigin()
+        if let session {
+            session.resetOrigin()
+        } else {
+            originEpoch += 1
+            arkit.resetOrigin()
+        }
+    }
+
+    func isValidDeviceName(_ name: String) -> Bool {
+        DeviceName.isValid(name)
+    }
+
+    func setDeviceName(_ name: String) -> Bool {
+        guard nameStore.save(name) else { return false }
+        deviceName = name
+        guard !probeMode, session != nil else { return true }
+        enterBackground()
+        enterForeground()
+        return true
     }
 
     /// 画面タップ用。ON のあいだだけ ARFrame レートでヒートマップを作る。
@@ -152,6 +245,16 @@ final class AppController: ObservableObject {
         deliveredFps = Double(n)
         tracking = label
         depthCenterM = depth
+        linkAddresses = LinkAddresses.current()
+        if let session {
+            originEpoch = Int(session.originEpoch)
+            let rates = session.effectiveRates()
+            poseHz = rates["odom"] ?? 0
+            colorHz = rates["color_image"] ?? 0
+            depthHz = rates["depth_image"] ?? 0
+            imuHz = rates["imu"] ?? rates["imu_raw"] ?? 0
+            clients = session.clientCount()
+        }
     }
 
     private func applyBattery(_ sample: BatterySample) {

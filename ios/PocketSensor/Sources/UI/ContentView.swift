@@ -6,6 +6,9 @@ struct ContentView: View {
     @StateObject private var controller = AppController()
     @StateObject private var interfaceOrientation = InterfaceOrientationObserver()
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var editingName = false
+    @State private var nameDraft = ""
 
     /// ヒートマップの長辺。縦持ちは Link と Tracking の下に積むので、画面の高さに収まるよう小さくする
     private static let heatmapLongLandscape: CGFloat = 200
@@ -34,10 +37,21 @@ struct ContentView: View {
             controller.togglePreview()
         }
         .onAppear {
-            // ARKit はバックグラウンドで止まるので、画面を消させない
-            UIApplication.shared.isIdleTimerDisabled = true
             interfaceOrientation.start()
             controller.start()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                controller.enterForeground()
+            case .background:
+                controller.enterBackground()
+            default:
+                break
+            }
+        }
+        .sheet(isPresented: $editingName) {
+            nameEditor
         }
     }
 
@@ -123,11 +137,75 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle("Link")
             VStack(alignment: .leading, spacing: 6) {
-                metric("server", "not wired yet")
-                metric("bonjour", "—")
-                metric("clients", "—")
+                metric("server", serverText)
+                metric("bonjour", bonjourText)
+                metric("clients", "\(controller.clients)")
+                ForEach(controller.linkAddresses, id: \.self) { row in
+                    metric(row.name, row.address)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text("name")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 72, alignment: .leading)
+                    Text(controller.deviceName)
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Button("変更") {
+                        nameDraft = controller.deviceName
+                        editingName = true
+                    }
+                    .font(.system(.caption))
+                    .buttonStyle(.borderless)
+                }
             }
         }
+    }
+
+    private var serverText: String {
+        if let port = controller.serverPort {
+            return "\(controller.serverState)  :\(port)"
+        }
+        return controller.serverState
+    }
+
+    private var bonjourText: String {
+        let name = controller.deviceName
+        let trimmed = name.count > 18 ? String(name.prefix(16)) + "…" : name
+        return "\(trimmed)  _pocketsensor._tcp"
+    }
+
+    private var nameEditor: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("端末名", text: $nameDraft)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .monospaced()
+                } footer: {
+                    Text("英小文字で始まり、英小文字・数字・下線だけを使います")
+                }
+            }
+            .navigationTitle("端末名")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { editingName = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        if controller.setDeviceName(nameDraft) {
+                            editingName = false
+                        }
+                    }
+                    .disabled(!controller.isValidDeviceName(nameDraft))
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 
     private var trackingColumn: some View {
@@ -139,9 +217,11 @@ struct ContentView: View {
                 .padding(.top, 2)
                 .padding(.bottom, 6)
             VStack(alignment: .leading, spacing: 6) {
-                metric("fps", String(format: "%.1f Hz", controller.deliveredFps))
+                metric("pose", String(format: "%.1f Hz", controller.poseHz))
+                metric("color", String(format: "%.1f Hz", controller.colorHz))
+                metric("depth", controller.depthCenterM.map { String(format: "%.1f Hz  %.2f m", controller.depthHz, $0) } ?? String(format: "%.1f Hz", controller.depthHz))
+                metric("imu", String(format: "%.1f Hz", controller.imuHz))
                 metric("origin", "\(controller.originEpoch)")
-                metric("depth", controller.depthCenterM.map { String(format: "%.2f m", $0) } ?? "—")
                 metric("thermal", controller.thermal)
                 metric("battery", controller.batteryText)
             }
