@@ -25,27 +25,52 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate, @unchecked Sen
     private let handlers = HandlerList<LocationSample>()
     private let lock = NSLock()
     private var running = false
+    private var status = CLAuthorizationStatus.notDetermined
+
+    /// 最後に知った許可の状態。diagnostics が、測位が届かない理由として流す。
+    var authorizationStatus: CLAuthorizationStatus {
+        lock.lock()
+        defer { lock.unlock() }
+        return status
+    }
 
     func onLocation(_ handler: @escaping (LocationSample) -> Void) {
         handlers.add(handler)
+    }
+
+    /// 許可の状態を読めるようにする。manager を作るだけなので、ダイアログは出ない。
+    func prepare() {
+        DispatchQueue.main.async { self.ensureManager() }
     }
 
     func start() {
         lock.lock()
         running = true
         lock.unlock()
-        // CLLocationManager はランループのあるスレッドで作る
         DispatchQueue.main.async {
-            if self.manager == nil {
-                let manager = CLLocationManager()
-                manager.delegate = self
-                manager.desiredAccuracy = kCLLocationAccuracyBest
-                manager.distanceFilter = kCLDistanceFilterNone
-                self.manager = manager
-            }
-            self.manager?.requestWhenInUseAuthorization()
-            self.manager?.startUpdatingLocation()
+            let manager = self.ensureManager()
+            manager.requestWhenInUseAuthorization()
+            manager.startUpdatingLocation()
         }
+    }
+
+    /// CLLocationManager はランループのあるスレッドで作るので、main から呼ぶ。
+    @discardableResult
+    private func ensureManager() -> CLLocationManager {
+        if let manager { return manager }
+        let created = CLLocationManager()
+        created.delegate = self
+        created.desiredAccuracy = kCLLocationAccuracyBest
+        created.distanceFilter = kCLDistanceFilterNone
+        manager = created
+        remember(created.authorizationStatus)
+        return created
+    }
+
+    private func remember(_ value: CLAuthorizationStatus) {
+        lock.lock()
+        status = value
+        lock.unlock()
     }
 
     func stop() {
@@ -80,6 +105,7 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate, @unchecked Sen
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         lock.lock()
+        status = manager.authorizationStatus
         let run = running
         lock.unlock()
         guard run else { return }

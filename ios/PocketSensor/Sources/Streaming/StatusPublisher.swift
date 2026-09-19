@@ -9,11 +9,13 @@ import UIKit
 /// 電池、1 Hz の diagnostics、起動時と変更時の tf_static / device_info。
 final class StatusPublisher: @unchecked Sendable {
     private let runtime: StreamingRuntime
+    private let locationAuthorization: () -> LocationAuthorization
     private let queue = DispatchQueue(label: "pocketsensor.status", qos: .utility)
     private var timer: DispatchSourceTimer?
 
-    init(runtime: StreamingRuntime) {
+    init(runtime: StreamingRuntime, locationAuthorization: @escaping () -> LocationAuthorization) {
         self.runtime = runtime
+        self.locationAuthorization = locationAuthorization
     }
 
     func start() {
@@ -107,7 +109,8 @@ final class StatusPublisher: @unchecked Sendable {
                 drops: stats.dropsByChannelKey,
                 encodeSkips: ["color": rates.encodeSkips],
                 clock: rates.clock,
-                magCalibration: rates.magCalibration
+                magCalibration: rates.magCalibration,
+                locationAuthorization: locationAuthorization()
             )
         )
         runtime.server.publish("diagnostics", stampNs: stampNs, payload: encodeCDR(diag))

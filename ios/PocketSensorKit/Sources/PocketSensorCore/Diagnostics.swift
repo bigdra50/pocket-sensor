@@ -20,6 +20,15 @@ public enum MagCalibration: String, Equatable, Sendable {
     }
 }
 
+/// 位置情報の許可の状態。許可されるまで GNSS は 1 件も届かないので、受け手が理由を知るために流す。
+public enum LocationAuthorization: String, Equatable, Sendable {
+    case unknown
+    case notDetermined = "not_determined"
+    case denied
+    case restricted
+    case authorized
+}
+
 public struct DiagnosticsInput: Equatable, Sendable {
     public var deviceName: String
     public var trackingState: TrackingState
@@ -31,6 +40,7 @@ public struct DiagnosticsInput: Equatable, Sendable {
     public var encodeSkips: [String: Int]
     public var clock: ClockCheckStatus
     public var magCalibration: MagCalibration
+    public var locationAuthorization: LocationAuthorization
 
     public init(
         deviceName: String,
@@ -42,7 +52,8 @@ public struct DiagnosticsInput: Equatable, Sendable {
         drops: [String: Int],
         encodeSkips: [String: Int] = [:],
         clock: ClockCheckStatus,
-        magCalibration: MagCalibration
+        magCalibration: MagCalibration,
+        locationAuthorization: LocationAuthorization
     ) {
         self.deviceName = deviceName
         self.trackingState = trackingState
@@ -54,6 +65,7 @@ public struct DiagnosticsInput: Equatable, Sendable {
         self.encodeSkips = encodeSkips
         self.clock = clock
         self.magCalibration = magCalibration
+        self.locationAuthorization = locationAuthorization
     }
 }
 
@@ -67,6 +79,7 @@ public enum Diagnostics {
                 streamsStatus(input),
                 clockStatus(input),
                 magStatus(input),
+                gnssStatus(input),
             ]
         )
     }
@@ -171,6 +184,26 @@ public enum Diagnostics {
             message: input.magCalibration.rawValue,
             hardwareId: input.deviceName,
             values: [("calibration", input.magCalibration.rawValue)]
+        )
+    }
+
+    private static func gnssStatus(_ input: DiagnosticsInput) -> DiagnosticMsgs.DiagnosticStatus {
+        let level: UInt8
+        switch input.locationAuthorization {
+        case .authorized:
+            level = DiagnosticMsgs.DiagnosticStatus.ok
+        case .notDetermined, .unknown:
+            // 許可のダイアログは、GNSS が最初に購読された時点で端末の画面に出る。答えるまで測位は届かない。
+            level = DiagnosticMsgs.DiagnosticStatus.warn
+        case .denied, .restricted:
+            level = DiagnosticMsgs.DiagnosticStatus.error
+        }
+        return status(
+            level: level,
+            name: "pocketsensor/gnss",
+            message: input.locationAuthorization.rawValue,
+            hardwareId: input.deviceName,
+            values: [("authorization", input.locationAuthorization.rawValue)]
         )
     }
 

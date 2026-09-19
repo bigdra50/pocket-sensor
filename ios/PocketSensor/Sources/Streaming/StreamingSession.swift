@@ -54,7 +54,10 @@ final class StreamingSession: @unchecked Sendable {
         arFrames = ARFramePublisher(runtime: runtime)
         motionPub = MotionPublisher(runtime: runtime)
         locationPub = LocationPublisher(runtime: runtime)
-        statusPub = StatusPublisher(runtime: runtime)
+        location.prepare()
+        statusPub = StatusPublisher(runtime: runtime) { [location] in
+            StreamingMap.locationAuthorization(location.authorizationStatus)
+        }
         runtime.onLatchNeeded = { [weak self] in
             self?.statusPub.scheduleLatched()
         }

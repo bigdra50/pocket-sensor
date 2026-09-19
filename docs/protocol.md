@@ -160,6 +160,28 @@ Ouster の `SensorInfo` と同じ役割を持つ。
 | `clock` | 時計の種類と、壁時計へ固定したときの差。[time.md](time.md) を参照 |
 | `frames` | frame 名の一覧と、固定の変換 |
 
+### diagnostics の中身
+
+`/diagnostics` は、受け手が端末の画面を見ずに状態を知るためのチャンネルである。
+データが届かない理由（追跡の喪失、熱によるレートの低下、背圧による破棄、位置情報の許可の不足）を、ここで判別できるようにする。
+1 Hz で、次の status を 1 つの `DiagnosticArray` にまとめて流す。
+`hardware_id` には端末の名前を入れる。
+
+| `name` | `level` | `values` |
+| --- | --- | --- |
+| `pocketsensor/tracking` | 正常は OK、制限ありは WARN、利用不可は ERROR | `state`、`reason`（`TrackingStatus` と同じ数値） |
+| `pocketsensor/thermal` | nominal と fair は OK、serious は WARN、critical は ERROR | `level` |
+| `pocketsensor/streams` | 破棄が 1 件でもあれば WARN | `clients`、`rate.<key>`（送った実績の Hz）、`drops.<key>`（背圧で捨てた数）、`encode_skips.<key>`（符号化が間に合わず飛ばした数） |
+| `pocketsensor/clock` | 自己点検が suspicious なら ERROR | `self_check`（[time.md](time.md) を参照） |
+| `pocketsensor/mag` | high と medium は OK、low と unknown は WARN、未較正は ERROR | `calibration` |
+| `pocketsensor/gnss` | authorized は OK、not_determined は WARN、denied と restricted は ERROR | `authorization` |
+
+`<key>` は、チャンネルの表（`contract/channels.toml`）の key である。
+`message` には、その status の要約（`values` の主な値と同じ文字列）を入れる。
+
+位置情報の許可を端末の画面で求めるのは、GNSS のチャンネルが最初に購読された時点である。
+許可されるまで `gnss/fix` は届かないので、受け手は `pocketsensor/gnss` の `authorization` で理由を知る。
+
 ### 次の段階で足すチャンネル
 
 | トピック | 型 | 内容 |

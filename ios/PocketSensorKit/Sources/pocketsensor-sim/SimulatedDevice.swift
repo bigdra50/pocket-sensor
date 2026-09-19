@@ -513,7 +513,8 @@ final class SimulatedDevice: @unchecked Sendable {
                     drops: stats.dropsByChannelKey,
                     encodeSkips: ["color": encodeSkipSnapshot()],
                     clock: .ok,
-                    magCalibration: .high
+                    magCalibration: .high,
+                    locationAuthorization: .authorized
                 )
             )
             server.publish("diagnostics", stampNs: stampNs, payload: encodeCDR(diag))

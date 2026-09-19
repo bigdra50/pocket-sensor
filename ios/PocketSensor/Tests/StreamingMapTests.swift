@@ -1,4 +1,5 @@
 import ARKit
+import CoreLocation
 import CoreMotion
 import PocketSensorCore
 import simd
@@ -34,6 +35,14 @@ final class StreamingMapTests: XCTestCase {
         XCTAssertEqual(StreamingMap.imuReference("nope"), .arbitrary)
         XCTAssertEqual(StreamingMap.cmAttitudeFrame(.arbitrary), .xArbitraryCorrectedZVertical)
         XCTAssertEqual(StreamingMap.cmAttitudeFrame(.trueNorth), .xTrueNorthZVertical)
+    }
+
+    func testLocationAuthorizationMapsEveryStatus() {
+        XCTAssertEqual(StreamingMap.locationAuthorization(.notDetermined), .notDetermined)
+        XCTAssertEqual(StreamingMap.locationAuthorization(.denied), .denied)
+        XCTAssertEqual(StreamingMap.locationAuthorization(.restricted), .restricted)
+        XCTAssertEqual(StreamingMap.locationAuthorization(.authorizedWhenInUse), .authorized)
+        XCTAssertEqual(StreamingMap.locationAuthorization(.authorizedAlways), .authorized)
     }
 
     func testAttitudeIsPassedThroughWithoutInverse() {

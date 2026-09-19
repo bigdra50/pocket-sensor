@@ -1,4 +1,5 @@
 import ARKit
+import CoreLocation
 import CoreMotion
 import Foundation
 import PocketSensorCore
@@ -31,6 +32,16 @@ enum StreamingMap {
         case .serious: return .serious
         case .critical: return .critical
         @unknown default: return .nominal
+        }
+    }
+
+    static func locationAuthorization(_ status: CLAuthorizationStatus) -> LocationAuthorization {
+        switch status {
+        case .notDetermined: return .notDetermined
+        case .denied: return .denied
+        case .restricted: return .restricted
+        case .authorizedWhenInUse, .authorizedAlways: return .authorized
+        @unknown default: return .unknown
         }
     }
 
