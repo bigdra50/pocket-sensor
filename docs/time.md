@@ -26,14 +26,19 @@ iPhone のアプリは、`mach_absolute_time` の系統の時計を基準にす�
 | `CACurrentMediaTime()` | `mach_absolute_time` を秒へ直した値 | Apple のドキュメントに明記がある |
 | AVCapture の `CMSampleBuffer` の時刻 | ホスト時計。iOS では `mach_absolute_time` に基づく | Apple の QA1643 |
 | `ProcessInfo.systemUptime` | 再起動から、起きていた時間 | Apple のドキュメント |
-| `ARFrame.timestamp` | 文書化されていない | Apple の技術サポートが、フォーラムで `mach_absolute_time` に基づくと答えている |
-| `CMLogItem.timestamp` | 端末の起動からの秒。スリープを含むかは書かれていない | 同上 |
+| `ARFrame.timestamp` | `mach_absolute_time` の系統 | 文書化されていない。実機の測定で確かめた |
+| `CMLogItem.timestamp` | `mach_absolute_time` の系統 | 文書化されていない。実機の測定で確かめた |
 | `CLLocation.timestamp` | 壁時計（`Date`） | Apple のドキュメント |
 
 `ARFrame.timestamp` と `CMLogItem.timestamp` の時計は、Apple が文書化していない。
-そこでアプリは、セッションの開始時に自己診断をする。
+iPhone 16 Pro（iOS 26.7）の実機では、どちらも `CACurrentMediaTime()` と同じ時計だった。
+測定の記録は [research/on-device-measurements.md](research/on-device-measurements.md) にある。
+機種や OS の版で変わる可能性が残るので、アプリはセッションの開始時に自己診断をする。
 フレームや IMU のサンプルが届いた時点の `CACurrentMediaTime()` と、そのサンプルの時刻との差を測る。
 差が 0 秒から 0.5 秒の範囲に収まらなければ、時計が違うものとして `/diagnostics` で警告する。
+実機での差は、ARFrame で 29 ms から 52 ms、IMU で約 1 ms だった。
+気圧計は自己診断の対象にしない。
+気圧計のサンプルは、時計が同じでも、時刻から 1.6 秒以上遅れて届くためである。
 
 スリープのあいだ時計が止まることは、運用では問題にならない。
 アプリは前面で動き、画面のロックを抑止しているので、配信中に端末はスリープしない。
@@ -41,7 +46,7 @@ iPhone のアプリは、`mach_absolute_time` の系統の時計を基準にす�
 端末がスリープした場合も、復帰後は新しいセッションになる。
 
 スリープ中も進む `mach_continuous_time` を基準にする案は採らなかった。
-上の表のとおり、センサーの時刻は `mach_absolute_time` の系統で届くと見ている。
+上の表のとおり、センサーの時刻は `mach_absolute_time` の系統で届く。
 別の時計へ写すと、サンプルごとに換算の誤差が入る。
 
 ## wire に載せる時刻

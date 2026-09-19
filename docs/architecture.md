@@ -172,10 +172,13 @@ xlerobot-book の実験は、pocketsensor が前身と同じ機能（姿勢、�
 
 ## 実機で確かめること
 
+加速度の符号、センサーの時刻の時計、座標軸の対応は、実機の測定で確かめた。
+記録は [research/on-device-measurements.md](research/on-device-measurements.md) にある。
+残っているのは次の項目である。
+座標と単位に関わる残りの項目は、[frames-and-units.md](frames-and-units.md) の表にある。
+
 | 項目 | 見込み | 確かめ方 |
 | --- | --- | --- |
-| 加速度の符号 | Core Motion は、画面を上にして置くと z が -1 G を返すと見ている。REP-145 は +g を求めるので、符号の反転が要る | 端末を机に置き、変換後の `linear_acceleration.z` が約 +9.8 になるかを見る |
-| `ARFrame.timestamp` と `CMLogItem.timestamp` の時計 | どちらも `mach_absolute_time` と同じ時計だと見ている。Apple は文書化していない | セッションの開始時に `CACurrentMediaTime()` との差を測る |
 | usbmux 経由での到達 | Record3D が同じ方式（TCP の待ち受け）で動いている。Apple の保証は無い | `iproxy` で転送し、SDK から接続する |
 | Lichtblick での H.264 の表示 | `foxglove_msgs/CompressedVideo` の要件（Annex B、B フレームなし）を満たせば映ると見ている | VideoToolbox の出力を Annex B へ変換して送る |
 | foxglove_bridge への publish | clientPublish が CDR を受ける。実機での確認例は見つかっていない | Docker の ROS 2 で foxglove_bridge を立て、iPhone から接続する |
