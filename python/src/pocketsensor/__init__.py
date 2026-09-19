@@ -4,6 +4,7 @@ from pocketsensor.calibration import Calibration
 from pocketsensor.clock import ClockNotReady, ClockView
 from pocketsensor.config import Config, FramePolicy, TimeDomain
 from pocketsensor.device import Device, DeviceStats, open
+from pocketsensor.discovery import DiscoveredDevice, discover
 from pocketsensor.errors import (
     ConnectionFailed,
     ConnectionLost,
@@ -13,6 +14,7 @@ from pocketsensor.errors import (
 )
 from pocketsensor.frameset import FrameSet
 from pocketsensor.intrinsics import Intrinsics, deproject
+from pocketsensor.playback import PlaybackDevice
 from pocketsensor.streams import Battery, Color, Depth, Gnss, Imu, Mag, Pose, Pressure, Stream
 from pocketsensor.types import (
     BatteryStatus,
@@ -49,6 +51,7 @@ __all__ = [
     "Device",
     "DeviceInfo",
     "DeviceStats",
+    "DiscoveredDevice",
     "FramePolicy",
     "FrameSet",
     "Gnss",
@@ -58,6 +61,7 @@ __all__ = [
     "Intrinsics",
     "Mag",
     "MagSample",
+    "PlaybackDevice",
     "PocketSensorError",
     "Pose",
     "PoseSample",
@@ -72,5 +76,6 @@ __all__ = [
     "Unsupported",
     "__version__",
     "deproject",
+    "discover",
     "open",
 ]
