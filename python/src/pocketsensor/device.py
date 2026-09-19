@@ -8,6 +8,7 @@ import time
 from collections import deque
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from pocketsensor.buffers import LatestValue, SampleBuffer
@@ -63,6 +64,7 @@ class DeviceStats:
     dropped_framesets: int = 0
     dropped_incomplete: int = 0
     dropped_imu: int = 0
+    dropped_record: int = 0
     received_messages: dict[str, int] = field(default_factory=dict)
 
 
@@ -93,15 +95,30 @@ class _Latest:
 class Device:
     """開いた端末。受信は裏スレッド、公開 API は同期。"""
 
-    def __init__(self, client: FoxgloveClient, config: Config) -> None:
+    def __init__(
+        self,
+        client: FoxgloveClient | None,
+        config: Config,
+        *,
+        source: str = "",
+        playback: bool = False,
+        realtime: bool = True,
+    ) -> None:
         self._client = client
         self._config = config
+        self._source = source
+        self._playback = playback
+        self._realtime = realtime
+        self._allow_host_arrival = not playback
+        self._latest_only = (not playback) or realtime
         self._codec = CdrCodec.from_contract()
         self._lock = threading.RLock()
         self._dead = False
+        self._eof = False
         self._name = ""
         self._session_id = ""
         self._info: DeviceInfo | None = None
+        self._device_info_json: str | None = None
         self._tf_static: list[dict[str, Any]] = []
         self._tf_loaded = False
         self._caminfo: dict[Stream, Intrinsics] = {}
@@ -121,6 +138,8 @@ class Device:
         self._clock_view = ClockView(self._host_est, self._wall_est, self._clock_lock)
         self._clock_stop = threading.Event()
         self._clock_thread: threading.Thread | None = None
+        self._clock_samples_mono: list[list[int]] = []
+        self._clock_samples_wall: list[list[int]] = []
         self._imu = SampleBuffer[ImuSample](config.imu_buffer_seconds)
         self._imu_raw = SampleBuffer[ImuSample](config.imu_buffer_seconds)
         self._mag = SampleBuffer[MagSample](config.imu_buffer_seconds)
@@ -129,11 +148,13 @@ class Device:
         self._battery: LatestValue[BatteryStatus] = LatestValue()
         self._gnss_time_ref: dict[int, int] = {}
         self._stats = DeviceStats()
-        self._pending_fs: FrameSet | None = None
+        self._pending_sets: deque[FrameSet] = deque()
         self._frame_cv = threading.Condition(self._lock)
         self._msg_q: deque[tuple[str, int, Any]] = deque()
         self._msg_cv = threading.Condition(self._lock)
         self._raw_taps: list[RawTap] = []
+        self._latched_raw: dict[str, tuple[ChannelInfo, int, bytes]] = {}
+        self._recorder: Any = None
         self.imu = _Drain(self, self._imu)
         self.imu_raw = _Drain(self, self._imu_raw)
         self.mag = _Drain(self, self._mag)
@@ -150,7 +171,7 @@ class Device:
         except (OSError, TimeoutError) as exc:
             raise ConnectionFailed(f"could not connect to {source}") from exc
         client = FoxgloveClient(transport)
-        device = cls(client, config)
+        device = cls(client, config, source=source)
         try:
             device._startup()
         except BaseException:
@@ -159,6 +180,7 @@ class Device:
         return device
 
     def _startup(self) -> None:
+        assert self._client is not None
         deadline = time.monotonic() + self._config.open_timeout
         self._client.on_message = self._on_message
         self._client.on_disconnect = self._on_disconnect
@@ -231,8 +253,12 @@ class Device:
         self.close()
 
     def close(self) -> None:
+        rec = self._recorder
+        if rec is not None:
+            rec.stop()
         self._clock_stop.set()
-        self._client.close()
+        if self._client is not None:
+            self._client.close()
         self._on_disconnect()
 
     @property
@@ -268,6 +294,7 @@ class Device:
                 dropped_framesets=self._stats.dropped_framesets,
                 dropped_incomplete=self._assembler.dropped_incomplete,
                 dropped_imu=self._imu.dropped + self._imu_raw.dropped,
+                dropped_record=self._stats.dropped_record,
                 received_messages=dict(self._stats.received_messages),
             )
 
@@ -275,15 +302,15 @@ class Device:
         self._raise_if_dead()
         deadline = None if timeout is None else time.monotonic() + timeout
         with self._lock:
-            while self._pending_fs is None:
+            while not self._pending_sets:
+                if self._eof:
+                    raise EOFError("end of recording")
                 self._raise_if_dead()
                 remaining = None if deadline is None else deadline - time.monotonic()
                 if remaining is not None and remaining <= 0:
                     raise TimeoutError("wait_for_frames timed out")
                 self._frame_cv.wait(timeout=remaining)
-            frames = self._pending_fs
-            self._pending_fs = None
-            return frames
+            return self._pending_sets.popleft()
 
     def messages(self, topics: Sequence[str] | None = None) -> Iterator[tuple[str, int, Any]]:
         wanted = set(topics) if topics is not None else None
@@ -297,19 +324,31 @@ class Device:
             if wanted is None or item[0] in wanted:
                 yield item
 
+    def _require_live(self) -> None:
+        if self._playback or self._client is None:
+            raise Unsupported("operation is not available during playback")
+
     def set_rate(self, stream: Stream, hz: float) -> dict[str, Any]:
+        self._require_live()
+        assert self._client is not None
         param = RATE_PARAM_BY_STREAM.get(stream)
         if param is None:
             raise Unsupported(f"stream {stream.name} has no rate parameter")
         return self._client.set_parameters({param: float(hz)})
 
     def set_color_width(self, px: int) -> dict[str, Any]:
+        self._require_live()
+        assert self._client is not None
         return self._client.set_parameters({"color.width": int(px)})
 
     def set_jpeg_quality(self, quality: float) -> dict[str, Any]:
+        self._require_live()
+        assert self._client is not None
         return self._client.set_parameters({"color.jpeg_quality": float(quality)})
 
     def reset_origin(self) -> tuple[bool, str]:
+        self._require_live()
+        assert self._client is not None
         req = self._codec.make("std_srvs/srv/Trigger_Request")
         payload = self._codec.encode("std_srvs/srv/Trigger_Request", req)
         raw = self._client.call_service(
@@ -317,6 +356,21 @@ class Device:
         )
         resp = self._codec.decode("std_srvs/srv/Trigger_Response", raw)
         return bool(resp.success), str(resp.message)
+
+    def record(self, path: str | Path) -> Any:
+        self._require_live()
+        if self._recorder is not None:
+            raise RuntimeError("already recording")
+        from pocketsensor.record import Recorder
+
+        rec = Recorder(self, path)
+        rec.start()
+        self._recorder = rec
+        return rec
+
+    def _note_record_drop(self) -> None:
+        with self._lock:
+            self._stats.dropped_record += 1
 
     def add_raw_tap(self, callback: RawTap) -> None:
         with self._lock:
@@ -327,6 +381,7 @@ class Device:
             self._raw_taps = [cb for cb in self._raw_taps if cb is not callback]
 
     def _one_clock_sync(self, timeout: float = 1.0) -> None:
+        assert self._client is not None
         t1_mono = time.monotonic_ns()
         t1_wall = time.time_ns()
         req = self._codec.make("pocketsensor_msgs/srv/ClockSync_Request", t1=t1_mono)
@@ -339,6 +394,8 @@ class Device:
         with self._clock_lock:
             self._host_est.add(ClockSample(t1_mono, int(resp.t2), int(resp.t3), t4_mono))
             self._wall_est.add(ClockSample(t1_wall, int(resp.t2), int(resp.t3), t4_wall))
+            self._clock_samples_mono.append([t1_mono, int(resp.t2), int(resp.t3), t4_mono])
+            self._clock_samples_wall.append([t1_wall, int(resp.t2), int(resp.t3), t4_wall])
 
     def _clock_loop(self) -> None:
         count = self._host_est.sample_count
@@ -366,6 +423,8 @@ class Device:
             received = self._stats.received_messages.get(channel.topic, 0) + 1
             self._stats.received_messages[channel.topic] = received
             taps = list(self._raw_taps)
+            if channel.topic == "/tf_static" or channel.topic.endswith("/device_info"):
+                self._latched_raw[channel.topic] = (channel, log_time_ns, payload)
         for tap in taps:
             try:
                 tap(channel, log_time_ns, payload)
@@ -394,6 +453,7 @@ class Device:
             info = decode_device_info(msg)
             with self._lock:
                 self._info = info
+                self._device_info_json = str(msg.data)
             return
         if key == "tf_static":
             rows = []
@@ -501,14 +561,23 @@ class Device:
         sets = self._assembler.feed(stream, t_ns, value, arrival)
         for frames in sets:
             frames._clock = self._clock_view
+            frames._allow_host_arrival = self._allow_host_arrival
             with self._lock:
-                if self._pending_fs is not None:
-                    self._stats.dropped_framesets += 1
-                self._pending_fs = frames
+                if self._latest_only:
+                    if self._pending_sets:
+                        self._stats.dropped_framesets += 1
+                        self._pending_sets.clear()
+                    self._pending_sets.append(frames)
+                else:
+                    self._pending_sets.append(frames)
                 self._frame_cv.notify()
 
 
-def open(source: str, config: Config | None = None) -> Device:
+def open(source: str, config: Config | None = None, *, realtime: bool = True) -> Device:
     if config is None:
         config = Config(streams=(Color(),))
+    from pocketsensor.playback import is_recording_source, open_playback
+
+    if is_recording_source(source):
+        return open_playback(source, config, realtime=realtime)
     return Device.connect(source, config)

@@ -32,6 +32,14 @@ def channel_topic(key: str, name: str) -> str:
     return template.replace("<name>", name)
 
 
+def topic_to_key(topic: str, name: str) -> str | None:
+    """広告された topic から契約の key を返す。"""
+    for key in _TOPIC_BY_KEY:
+        if channel_topic(key, name) == topic:
+            return key
+    return None
+
+
 def channel_row(key: str) -> dict[str, object]:
     for row in CHANNELS:
         if row["key"] == key:

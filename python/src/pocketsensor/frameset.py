@@ -7,7 +7,7 @@ from typing import Any
 
 from pocketsensor.clock import ClockView
 from pocketsensor.config import FramePolicy, TimeDomain
-from pocketsensor.errors import ClockNotReady
+from pocketsensor.errors import ClockNotReady, Unsupported
 from pocketsensor.streams import Stream
 from pocketsensor.types import (
     ColorFrame,
@@ -41,11 +41,14 @@ class FrameSet:
     t_device_ns: int
     arrival_ns: int
     _clock: ClockView | None = field(default=None, repr=False, compare=False)
+    _allow_host_arrival: bool = field(default=True, repr=False, compare=False)
 
     def timestamp(self, domain: TimeDomain) -> int:
         if domain is TimeDomain.DEVICE:
             return self.t_device_ns
         if domain is TimeDomain.HOST_ARRIVAL:
+            if not self._allow_host_arrival:
+                raise Unsupported("HOST_ARRIVAL is not available in playback")
             return self.arrival_ns
         if domain is TimeDomain.HOST:
             if self._clock is None or not self._clock.ready:
@@ -56,6 +59,8 @@ class FrameSet:
     @property
     def latency_ns(self) -> int:
         """HOST_ARRIVAL から HOST を引いた値。計測から到着までの遅延。"""
+        if not self._allow_host_arrival:
+            raise Unsupported("HOST_ARRIVAL is not available in playback")
         host = self.timestamp(TimeDomain.HOST)
         return int(self.arrival_ns - host)
 
