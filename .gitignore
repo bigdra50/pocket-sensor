@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Python (uv)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+*.egg-info/
+
+# Xcode (XcodeGen が生成するプロジェクトは追跡しない)
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+build/
+
+# 記録したデータ
+*.mcap
+runs/
+
+# ローカルの設定
+mise.local.toml
+.env
