@@ -201,7 +201,7 @@ LiDAR の無い機種では、深度と confidence が一覧に現れない。
 | 配列 | `numpy` | 必須 |
 | CDR の復号 | `rosbags`（Apache-2.0、純 Python） | 必須。ROS 2 のインストールは要らない |
 | MCAP | `mcap` | 必須 |
-| JPEG の復号 | `opencv-python` か `simplejpeg` | 追加の依存（`pocketsensor[jpeg]`） |
+| JPEG の復号 | `simplejpeg`、`opencv-python`、`Pillow` のうち、入っているもの | 追加の依存（`pocketsensor[jpeg]` は `Pillow` を入れる） |
 | Bonjour | `zeroconf`（LGPL-2.1-or-later） | 追加の依存（`pocketsensor[discovery]`） |
 | H.264 の復号 | `av` | 追加の依存（`pocketsensor[video]`） |
 

@@ -68,7 +68,7 @@ ROS 2 は必須にせず、受け手側のアダプタとして足す。
 | 通信形式 | Foxglove WebSocket プロトコル v1 と互換にする | Lichtblick、Foxglove、PlotJuggler が iPhone へ直接つながる。購読したチャンネルだけを送る仕組みも仕様に含まれる |
 | 中身の型と符号化 | ROS 2 の標準メッセージを CDR で送る | IMU、地磁気、気圧、GNSS の型が揃っている。記録した MCAP を rosbag2 で再生でき、foxglove_bridge への publish にも同じバイト列を使える |
 | 座標と単位 | REP-103 と SI に揃え、変換はアプリが受け持つ | 可視化ツールや ROS 2 の中継は iPhone のデータを直接受ける。受け手側で変換する前提が成り立たない |
-| 契約の正本 | `.msg` とチャンネルの表を正本にし、Swift と Python の型はそこから生成する | 標準メッセージの定義は ROS 2 が保守している。2 つの言語の型を手で揃える作業が消える |
+| 契約の正本 | `.msg` とチャンネルの表を正本にする。Swift の型はそこから生成し、Python は `.msg` を実行時に読む | 標準メッセージの定義は ROS 2 が保守している。2 つの言語の型を手で揃える作業が消える |
 | 設定 | Foxglove の parameters に載せる | 平らな名前と値の組で足りる。Foxglove のパネルからも変更できる |
 | 時計合わせと指示 | Foxglove の services に載せる | プロトコルに時計合わせの仕組みが無い。往復 4 時刻の方式は、要求と応答の 1 往復で表せる |
 | 時刻 | センサーが計測した時刻を付け、受け手が時計のずれを推定する | 処理時点の時刻では、同じフレームの深度と姿勢に別々の時刻が付く。受け手が遅延を補償するにも計測時刻が要る |
@@ -80,25 +80,20 @@ ROS 2 は必須にせず、受け手側のアダプタとして足す。
 | カメラのモード | ARKit から始める | 姿勢を取れるのは ARKit だけである。AVFoundation の LiDAR 深度カメラは、姿勢が要らない用途のために後で足す |
 | 派生データ | アプリは生データとメタデータだけを流す | 疑似 LaserScan のような加工は、ロボットごとに条件が違う。受け手側の `pointcloud_to_laserscan` や Nav2 の costmap が、高さの帯で切れる |
 | 認証と暗号化 | 最初は持たない | 信頼できる LAN と有線での利用から始める。足すときは、自己署名の証明書をピン留めする |
-| ライセンス | Apache-2.0 | 商用のロボットへ組み込める。特許条項があり、依存する swift-ros2 や `common_interfaces` と同じである |
+| ライセンス | Apache-2.0 | 商用のロボットへ組み込める。特許条項があり、`.msg` を取り込む `common_interfaces` と同じである |
 
 認証に TLS の事前共有鍵を使わないのは、Apple の実装では TLS 1.2 でしか使えないためである。
 根拠は [research/apple-apis.md](research/apple-apis.md) にある。
 
-### iOS アプリが使う swift-ros2 の範囲
+### Swift 側の CDR と型の生成
 
-iOS アプリは、swift-ros2 のうち次の 3 つだけを使う。
+iOS アプリは、CDR（XCDR v1、リトルエンディアン）の符号化を自前の小さな実装で持つ。
+メッセージの型、スキーマの本文、チャンネルの表は、`contract/` から生成する。
+生成したコードはリポジトリへ入れ、再生成しても差分が出ないことをテストで確かめる。
 
-| product | 用途 |
-| --- | --- |
-| `SwiftROS2CDR` | CDR（XCDR v1）の符号化と復号。依存を持たない |
-| `SwiftROS2Messages` | `sensor_msgs` などの標準メッセージの型 |
-| `SwiftROS2GenPlugin` | 組み込みに無い型（`nav_msgs/Odometry`、`pocketsensor_msgs`）を `.msg` から生成する |
-
-Zenoh、DDS、rcl を使う通信の層は取り込まない。
-swift-ros2 は 1.3.0 で pure-Swift の通信経路を非推奨にし、2.0.0 で削除すると告知している。
-削除の対象は通信の実行経路で、CDR のコーデックは残ると README に書かれている。
-根拠は [research/landscape.md](research/landscape.md) にある。
+符号化の正しさは、Python の `rosbags` が作ったバイト列との一致で確かめる。
+`rosbags` は rosbag2 の読み書きに広く使われている実装で、これを基準にする。
+必要な符号化は、基本型、文字列、固定長と可変長の配列、入れ子の型に限られ、実装は数百行に収まる。
 
 ### 採らなかった案
 
@@ -109,6 +104,7 @@ swift-ros2 は 1.3.0 で pure-Swift の通信経路を非推奨にし、2.0.0 �
 | iPhone を ROS 2 のノードにする | 受け手に ROS 2 が必須になる。この形は Conduit が既に提供している |
 | foxglove-sdk の C ライブラリを組み込む | Swift の binding が無い。サーバーの最小実装は小さく、Network.framework だけで書いた公式の前例（`foxglove-ios-bridge`）がある |
 | WebRTC | 深度を損失のある映像へ載せることになる。Record3D の WiFi 配信がこの形で、USB より品質が下がると公式に書いている |
+| swift-ros2 の CDR コーデック | パッケージが Apple 向けに Zenoh、CycloneDDS、rcl のビルド済みバイナリを宣言し、構成を環境変数で切り替える。コーデックだけが要るアプリには、依存の解決とビルドの構成が重い |
 
 ### Foxglove の仕様書にある注意書きの扱い
 
