@@ -66,7 +66,7 @@ frame の定義は [frames-and-units.md](frames-and-units.md) にある。
 | --- | --- | --- | --- |
 | `/<name>/odom` | `nav_msgs/msg/Odometry` | `<name>_odom`、child は `<name>_link` | 30 Hz |
 | `/<name>/tracking` | `pocketsensor_msgs/msg/TrackingStatus` | `<name>_link` | 姿勢と同じ |
-| `/tf` | `tf2_msgs/msg/TFMessage` | `<name>_odom` から `<name>_link` | 姿勢と同じ |
+| `/tf` | `tf2_msgs/msg/TFMessage` | `<name>_odom` から `<name>_link`。参照画像の anchor もここへ載る | 姿勢と同じ |
 | `/tf_static` | `tf2_msgs/msg/TFMessage` | `<name>_link` から各センサー | 購読の直後と変更時 |
 | `/<name>/color/image/compressed` | `sensor_msgs/msg/CompressedImage` | `<name>_color_optical_frame` | 15 Hz |
 | `/<name>/color/camera_info` | `sensor_msgs/msg/CameraInfo` | `<name>_color_optical_frame` | 画像と同じ |
@@ -116,6 +116,31 @@ ARKit は速度を出さないので、`twist` は求めない。
 独自のメッセージはこの 1 つと、時計合わせのサービスに限る。
 標準の型で表せるものに、独自の型を作らない。
 
+### 参照画像の anchor
+
+ARKit の world 原点は、セッションごとに変わる。
+部屋へ貼った画像を基準にすると、受け手はセッションをまたいで同じ原点を作れる。
+AprilTag に当たる役割を、ARKit の参照画像の検出が受け持つ。
+
+アプリへ組み込んだ参照画像を ARKit が追跡しているあいだ、`<name>_odom` から `<name>_anchor_<画像の名前>` への変換を `/tf` へ載せる。
+参照画像は、Xcode の AR Resource Group `Anchors` へ、印刷したときの実寸と一緒に登録する。
+画像の名前は frame 名の一部になるので、英小文字、数字、下線だけで付ける。
+
+| 項目 | 内容 |
+| --- | --- |
+| レート | 画像ごとに 0.5 秒に 1 回を上限にする |
+| 追跡が外れたとき | 流すのをやめる。ARKit は外れたあとも最後の変換を持ち続けるが、古い値なので出さない |
+| 時刻 | 検出した ARFrame の時刻。同じフレームの姿勢と同じ値になる |
+| まとめ方 | 姿勢を送る回にだけ、その姿勢の変換と同じ `TFMessage` へ載せる |
+
+anchor を姿勢と同じ回にだけ載せるので、anchor の時刻は `odom` のどれかの時刻と必ず一致する。
+受け手は、同じ時刻の姿勢と組にして、端末から見た anchor の位置（`<name>_link` から anchor への変換）を求められる。
+`pose.rate` を 2 Hz より下げると、anchor の間隔も姿勢の間隔まで延びる。
+
+同じメッセージへ載せるのは、`/tf` の背圧が最新 1 件の保持だからである。
+別のメッセージにすると、姿勢か anchor のどちらかが捨てられる。
+anchor の frame の軸は [frames-and-units.md](frames-and-units.md) にある。
+
 ### 購読の直後に送るチャンネル
 
 Foxglove WebSocket プロトコルには、ROS 2 の transient local に当たる仕組みが無い。
@@ -139,7 +164,6 @@ Ouster の `SensorInfo` と同じ役割を持つ。
 
 | トピック | 型 | 内容 |
 | --- | --- | --- |
-| `/tf`（追加） | `tf2_msgs/msg/TFMessage` | 参照画像の anchor。`<name>_odom` から `<name>_anchor_<画像の名前>`。追跡中だけ流す |
 | `/<name>/color/video` | `foxglove_msgs/msg/CompressedVideo` | H.264。Annex B、1 メッセージ 1 フレーム、B フレームなし、キーフレームに SPS と PPS を同梱 |
 | `/<name>/imu/mag_raw` | `sensor_msgs/msg/MagneticField` | 端末自身の磁気の偏りを含む生値 |
 | `/<name>/gnss/vel` | `geometry_msgs/msg/TwistStamped` | 対地速度。ENU で表す |

@@ -86,6 +86,24 @@ final class MessageBuildersTests: XCTestCase {
         XCTAssertEqual(msg.transforms[0].transform.translation.x, expected.position.x, accuracy: 1e-12)
     }
 
+    func testTfWithAnchorsPutsThePoseFirstAndSharesTheStamp() {
+        var anchor = matrix_identity_double4x4
+        anchor.columns.3 = SIMD4(0, 1, -2, 1)
+        let pose = PoseInput(cameraTransform: matrix_identity_double4x4, state: .normal, reason: .none, originEpoch: 0)
+
+        let poseOnly = MessageBuilders.tfWithAnchors(stampNs: stampNs, names: names, pose: pose, anchors: [])
+        XCTAssertEqual(poseOnly.transforms.map(\.childFrameId), ["phone_link"])
+
+        let both = MessageBuilders.tfWithAnchors(
+            stampNs: stampNs, names: names, pose: pose, anchors: [("door", anchor), ("dock", anchor)]
+        )
+        XCTAssertEqual(both.transforms.map(\.childFrameId), ["phone_link", "phone_anchor_door", "phone_anchor_dock"])
+        for transform in both.transforms {
+            XCTAssertEqual(transform.header.stamp, both.transforms[0].header.stamp)
+            XCTAssertEqual(transform.header.frameId, "phone_odom")
+        }
+    }
+
     func testImuRawAndFusedConventions() {
         let raw = MessageBuilders.imuRaw(
             stampNs: stampNs,

@@ -67,26 +67,15 @@ final class ARFramePublisher: @unchecked Sendable {
             }
         }
 
-        if trackingAvailable, runtime.server.hasSubscribers("tf") {
-            var transforms: [GeometryMsgs.TransformStamped] = []
-            if poseDue {
-                transforms.append(contentsOf: MessageBuilders.tf(stampNs: stampNs, names: names, pose: pose).transforms)
-            }
+        // anchor は姿勢を送る回にだけ載せる。anchor の時刻が、odom のどれかの時刻と必ず一致する。
+        if poseDue, trackingAvailable, runtime.server.hasSubscribers("tf") {
             gateLock.lock()
-            for anchor in sample.imageAnchors {
-                if gate.shouldSend(name: anchor.name, isTracked: anchor.isTracked, atS: sample.timestamp) {
-                    transforms.append(contentsOf: MessageBuilders.anchorTF(
-                        stampNs: stampNs,
-                        names: names,
-                        imageName: anchor.name,
-                        anchorTransform: StreamingMap.poseMatrix(anchor.transform)
-                    ).transforms)
-                }
-            }
+            let dueAnchors = sample.imageAnchors
+                .filter { gate.shouldSend(name: $0.name, isTracked: $0.isTracked, atS: sample.timestamp) }
+                .map { (imageName: $0.name, transform: StreamingMap.poseMatrix($0.transform)) }
             gateLock.unlock()
-            if !transforms.isEmpty {
-                items.append(("tf", encodeCDR(Tf2Msgs.TFMessage(transforms: transforms))))
-            }
+            let message = MessageBuilders.tfWithAnchors(stampNs: stampNs, names: names, pose: pose, anchors: dueAnchors)
+            items.append(("tf", encodeCDR(message)))
         }
 
         if colorDue {

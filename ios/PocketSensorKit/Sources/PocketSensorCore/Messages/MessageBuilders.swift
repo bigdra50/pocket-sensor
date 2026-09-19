@@ -134,6 +134,29 @@ public enum MessageBuilders {
         ])
     }
 
+    /// 姿勢の変換と、この回に送る anchor を 1 つの `/tf` のメッセージにまとめる。姿勢を送る回にだけ呼ぶ。
+    ///
+    /// anchor を姿勢と同じ回にだけ載せるので、anchor の時刻は `odom` のどれかの時刻と必ず一致する。
+    /// 受け手は、同じ時刻の姿勢と組にして、端末から見た anchor の位置を求められる。
+    /// 別々のメッセージにしないのは、`/tf` の背圧が最新 1 件の保持で、片方が捨てられるため。
+    public static func tfWithAnchors(
+        stampNs: UInt64,
+        names: FrameNames,
+        pose: PoseInput,
+        anchors: [(imageName: String, transform: simd_double4x4)]
+    ) -> Tf2Msgs.TFMessage {
+        var transforms = tf(stampNs: stampNs, names: names, pose: pose).transforms
+        for anchor in anchors {
+            transforms.append(contentsOf: anchorTF(
+                stampNs: stampNs,
+                names: names,
+                imageName: anchor.imageName,
+                anchorTransform: anchor.transform
+            ).transforms)
+        }
+        return Tf2Msgs.TFMessage(transforms: transforms)
+    }
+
     public static func compressedImage(stampNs: UInt64, names: FrameNames, jpeg: Data) -> SensorMsgs.CompressedImage {
         SensorMsgs.CompressedImage(
             header: WireStamp.header(stampNs: stampNs, frameId: names.colorOptical),
