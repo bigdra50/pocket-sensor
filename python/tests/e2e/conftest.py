@@ -78,20 +78,28 @@ def _stop_sim(proc: subprocess.Popen[str]) -> None:
 
 
 @contextmanager
-def run_sim(*, name: str = "pocketsensor", duration: float = 600.0) -> Iterator[str]:
+def run_sim(
+    *,
+    name: str = "pocketsensor",
+    duration: float = 600.0,
+    extra_args: list[str] | None = None,
+) -> Iterator[str]:
     binary = _locate_or_build_sim()
+    cmd = [
+        str(binary),
+        "--port",
+        "0",
+        "--no-bonjour",
+        "--duration",
+        str(int(duration)),
+        "--quiet",
+        "--name",
+        name,
+    ]
+    if extra_args:
+        cmd.extend(extra_args)
     proc = subprocess.Popen(
-        [
-            str(binary),
-            "--port",
-            "0",
-            "--no-bonjour",
-            "--duration",
-            str(int(duration)),
-            "--quiet",
-            "--name",
-            name,
-        ],
+        cmd,
         cwd=str(KIT),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -117,4 +125,10 @@ def sim_device() -> Iterator[str]:
 @pytest.fixture
 def named_sim_device() -> Iterator[str]:
     with run_sim(name="robot1") as url:
+        yield url
+
+
+@pytest.fixture
+def anchor_sim_device() -> Iterator[str]:
+    with run_sim(name="pocketsensor", extra_args=["--anchor", "dock", "--anchor", "door"]) as url:
         yield url
