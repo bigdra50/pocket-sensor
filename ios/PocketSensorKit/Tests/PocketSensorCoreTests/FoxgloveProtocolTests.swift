@@ -177,6 +177,18 @@ final class FoxgloveProtocolTests: XCTestCase {
             try FoxgloveBinary.parseClientBinary(request),
             .serviceCallRequest(serviceId: 8, callId: 1, encoding: "cdr", payload: Data([0xFF]))
         )
+        XCTAssertEqual(
+            FoxgloveBinary.serviceCallRequest(serviceId: 8, callId: 1, encoding: "cdr", payload: Data([0xFF])),
+            request
+        )
+        XCTAssertEqual(
+            try FoxgloveBinary.parseServerBinary(message),
+            .messageData(subscriptionId: 1, timestampNs: 2, payload: payload)
+        )
+        XCTAssertEqual(
+            try FoxgloveBinary.parseServerBinary(response),
+            .serviceCallResponse(serviceId: 5, callId: 9, encoding: "cdr", payload: Data([0x01]))
+        )
         XCTAssertEqual(try FoxgloveBinary.parseClientBinary(Data([0x01, 0x00])), .unknown(opcode: 0x01))
         XCTAssertEqual(try FoxgloveBinary.parseClientBinary(Data([0x02])), .unknown(opcode: 0x02))
         XCTAssertThrowsError(try FoxgloveBinary.parseClientBinary(Data())) { error in

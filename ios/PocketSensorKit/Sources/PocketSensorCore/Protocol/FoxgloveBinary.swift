@@ -24,8 +24,23 @@ public enum FoxgloveBinary {
         serviceCall(opcode: 0x03, serviceId: serviceId, callId: callId, encoding: encoding, payload: payload)
     }
 
+    public static func serviceCallRequest(
+        serviceId: UInt32,
+        callId: UInt32,
+        encoding: String,
+        payload: Data
+    ) -> Data {
+        serviceCall(opcode: 0x02, serviceId: serviceId, callId: callId, encoding: encoding, payload: payload)
+    }
+
     public enum ClientBinary: Equatable, Sendable {
         case serviceCallRequest(serviceId: UInt32, callId: UInt32, encoding: String, payload: Data)
+        case unknown(opcode: UInt8)
+    }
+
+    public enum ServerBinary: Equatable, Sendable {
+        case messageData(subscriptionId: UInt32, timestampNs: UInt64, payload: Data)
+        case serviceCallResponse(serviceId: UInt32, callId: UInt32, encoding: String, payload: Data)
         case unknown(opcode: UInt8)
     }
 
@@ -34,6 +49,29 @@ public enum FoxgloveBinary {
         if opcode == 0x02 {
             if let parsed = parseServiceCall(data) {
                 return .serviceCallRequest(
+                    serviceId: parsed.serviceId,
+                    callId: parsed.callId,
+                    encoding: parsed.encoding,
+                    payload: parsed.payload
+                )
+            }
+        }
+        return .unknown(opcode: opcode)
+    }
+
+    public static func parseServerBinary(_ data: Data) throws -> ServerBinary {
+        guard let opcode = data.first else { throw FoxgloveBinaryError.empty }
+        if opcode == 0x01 {
+            guard data.count >= 13 else { return .unknown(opcode: opcode) }
+            return .messageData(
+                subscriptionId: readUInt32(data, 1),
+                timestampNs: readUInt64(data, 5),
+                payload: data.subdata(in: 13 ..< data.count)
+            )
+        }
+        if opcode == 0x03 {
+            if let parsed = parseServiceCall(data) {
+                return .serviceCallResponse(
                     serviceId: parsed.serviceId,
                     callId: parsed.callId,
                     encoding: parsed.encoding,
@@ -111,4 +149,12 @@ private func readUInt32(_ data: Data, _ offset: Int) -> UInt32 {
         data.copyBytes(to: dest, from: offset ..< (offset + 4))
     }
     return UInt32(littleEndian: value)
+}
+
+private func readUInt64(_ data: Data, _ offset: Int) -> UInt64 {
+    var value: UInt64 = 0
+    _ = withUnsafeMutableBytes(of: &value) { dest in
+        data.copyBytes(to: dest, from: offset ..< (offset + 8))
+    }
+    return UInt64(littleEndian: value)
 }
