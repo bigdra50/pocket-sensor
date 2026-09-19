@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pocketsensor.clock import ClockEstimator, ClockNotReady, ClockSample
+from pocketsensor.clock import ClockEstimator, ClockNotReady, ClockSample, ClockView
 
 
 def test_symmetric_round_trip_recovers_exact_offset() -> None:
@@ -79,3 +79,14 @@ def test_theil_sen_drift_and_device_to_host() -> None:
     t_ref, offset_ref = est._adopted[-1]
     expected = t_device - (offset_ref + est.drift * ((t_device - offset_ref) - t_ref))
     assert est.device_to_host(t_device) == pytest.approx(expected)
+
+
+def test_clock_view_reports_the_wall_offset_separately() -> None:
+    host = ClockEstimator()
+    wall = ClockEstimator()
+    # 端末の wire 時刻は壁時計に anchor してある。単調時計とのずれは巨大で、壁時計とのずれだけが人に読める。
+    host.add(ClockSample(1_000, 1_700_000_000_000_001_500, 1_700_000_000_000_001_500, 2_000))
+    wall.add(ClockSample(10_000, 22_500, 22_500, 11_000))
+    view = ClockView(host, wall)
+    assert view.offset_ns == pytest.approx(1_700_000_000_000_000_000, rel=1e-12)
+    assert view.wall_offset_ns == pytest.approx(12_000)

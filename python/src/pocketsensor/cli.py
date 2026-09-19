@@ -136,11 +136,10 @@ def _cmd_info(args: argparse.Namespace) -> int:
         clock = dev.clock
         print(f"clock_ready={clock.ready}")
         if clock.ready:
-            print(f"clock_offset_ns={clock.offset_ns}")
-            print(f"clock_rtt_ns={clock.rtt_ns}")
+            print(f"clock_wall_offset_ms={clock.wall_offset_ns / 1e6:+.3f}")
+            print(f"clock_rtt_ms={clock.rtt_ns / 1e6:.3f}")
+            print(f"clock_drift_ppm={clock.drift_ppm:.3f}")
             print(f"clock_samples={clock.sample_count}")
-        else:
-            print("clock_offset_ns=unavailable")
     return 0
 
 

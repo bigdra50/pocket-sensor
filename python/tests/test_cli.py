@@ -66,7 +66,12 @@ def test_info_against_recorded_file(recorded_mcap: Path, capsys) -> None:
     assert main(["info", str(recorded_mcap)]) == 0
     out = capsys.readouterr().out
     assert "FakeDevice" in out
-    assert "clock" in out.lower() or "offset" in out.lower() or "ready" in out.lower()
+    assert "clock_ready=True" in out
+    fields = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+    # FakeDevice の時計はこのマシンの壁時計そのものなので、壁時計どうしのずれは 0 に近い。
+    assert abs(float(fields["clock_wall_offset_ms"])) < 50.0
+    assert 0.0 <= float(fields["clock_rtt_ms"]) < 1000.0
+    assert "e+" not in out
 
 
 def test_echo_against_recorded_file(recorded_mcap: Path, capsys) -> None:

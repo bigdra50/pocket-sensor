@@ -145,6 +145,16 @@ class ClockView:
             return self._host.offset_ns
 
     @property
+    def wall_offset_ns(self) -> float:
+        """端末の壁時計から受け手の壁時計を引いた値。
+
+        offset_ns は受け手の単調時計が相手なので、起動からの秒数と壁時計の差が入った巨大な値になる。
+        人が読む用途と、2 台の壁時計の合い具合を見る用途には、こちらを使う。
+        """
+        with self._guard():
+            return self._wall.offset_ns
+
+    @property
     def rtt_ns(self) -> int:
         with self._guard():
             return self._host.rtt_ns
