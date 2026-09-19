@@ -18,6 +18,24 @@ def test_scale_keeps_pixel_center_origin() -> None:
     assert got.fx == pytest.approx(1500.0 * sx)
     assert got.cx == pytest.approx((960.0 + 0.5) * sx - 0.5)
     assert got.cy == pytest.approx((720.0 + 0.5) * (192 / 1440) - 0.5)
+    assert got.distortion_model == "plumb_bob"
+    assert got.distortion == (0.0, 0.0, 0.0, 0.0, 0.0)
+
+
+def test_scale_preserves_distortion() -> None:
+    src = Intrinsics(
+        width=1920,
+        height=1440,
+        fx=1500.0,
+        fy=1500.0,
+        cx=960.0,
+        cy=720.0,
+        distortion_model="rational_polynomial",
+        distortion=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8),
+    )
+    got = scale_intrinsics(src, 256, 192)
+    assert got.distortion_model == "rational_polynomial"
+    assert got.distortion == (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
 
 
 def test_camera_info_plumb_bob_zeros() -> None:

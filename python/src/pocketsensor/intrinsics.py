@@ -16,6 +16,8 @@ class Intrinsics:
     fy: float
     cx: float
     cy: float
+    distortion_model: str = "plumb_bob"
+    distortion: tuple[float, ...] = (0.0, 0.0, 0.0, 0.0, 0.0)
 
 
 def scale_intrinsics(intrinsics: Intrinsics, new_width: int, new_height: int) -> Intrinsics:
@@ -29,18 +31,20 @@ def scale_intrinsics(intrinsics: Intrinsics, new_width: int, new_height: int) ->
         fy=intrinsics.fy * sy,
         cx=(intrinsics.cx + 0.5) * sx - 0.5,
         cy=(intrinsics.cy + 0.5) * sy - 0.5,
+        distortion_model=intrinsics.distortion_model,
+        distortion=intrinsics.distortion,
     )
 
 
 def camera_info_matrices(
     intrinsics: Intrinsics,
 ) -> tuple[list[float], list[float], list[float], list[float]]:
-    """K は行優先 9、R は単位、P は [K | 0]、D は 0 を 5 つ。"""
+    """K は行優先 9、R は単位、P は [K | 0]、D は distortion。"""
     fx, fy, cx, cy = intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy
     k = [fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0]
     r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
     p = [fx, 0.0, cx, 0.0, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0]
-    d = [0.0, 0.0, 0.0, 0.0, 0.0]
+    d = [float(v) for v in intrinsics.distortion]
     return k, r, p, d
 
 
