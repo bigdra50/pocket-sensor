@@ -78,6 +78,21 @@ def quat_to_matrix(q: ArrayLike) -> NDArray[np.float64]:
     )
 
 
+def quaternion_to_yaw(orientation_xyzw: ArrayLike) -> float:
+    """ROS の yaw（rad）。R = Rz(yaw) Ry(pitch) Rx(roll) なので、行列の xy から取る。"""
+    r = quat_to_matrix(orientation_xyzw)
+    return math.atan2(float(r[1, 0]), float(r[0, 0]))
+
+
+def rotate_vector(orientation_xyzw: ArrayLike, vector: ArrayLike) -> NDArray[np.float64]:
+    """四元数が表す回転をベクトルへ掛ける。vector は (3,) か (N, 3)。"""
+    r = quat_to_matrix(orientation_xyzw)
+    v = np.asarray(vector, dtype=np.float64)
+    if v.ndim == 1:
+        return r @ v.reshape(3)
+    return (r @ v.reshape(-1, 3).T).T
+
+
 def rpy_to_quaternion(roll: float, pitch: float, yaw: float) -> NDArray[np.float64]:
     """ROS の固定軸 RPY。R = Rz(yaw) Ry(pitch) Rx(roll)。返り値は (x, y, z, w)。"""
     cr = math.cos(roll)

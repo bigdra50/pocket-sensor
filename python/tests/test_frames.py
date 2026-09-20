@@ -14,7 +14,9 @@ from pocketsensor.frames import (
     arkit_pose_to_rep103,
     matrix_to_quat,
     quat_to_matrix,
+    quaternion_to_yaw,
     relative_pose,
+    rotate_vector,
     rpy_to_quaternion,
 )
 
@@ -113,3 +115,18 @@ def test_relative_pose_is_part_of_the_public_api() -> None:
     import pocketsensor as ps
 
     assert ps.relative_pose is relative_pose
+
+
+def test_quaternion_to_yaw_matches_rpy() -> None:
+    for deg in (-170.0, -90.0, -45.0, 0.0, 30.0, 90.0, 179.0):
+        yaw = math.radians(deg)
+        q = rpy_to_quaternion(0.1, -0.2, yaw)
+        assert quaternion_to_yaw(q) == pytest.approx(yaw, abs=1e-9)
+
+
+def test_rotate_vector_follows_the_rotation_matrix() -> None:
+    q = rpy_to_quaternion(0.0, 0.0, math.pi / 2)
+    rotated = rotate_vector(q, np.array([1.0, 0.0, 0.0]))
+    np.testing.assert_allclose(rotated, [0.0, 1.0, 0.0], atol=1e-12)
+    batch = rotate_vector(q, np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]))
+    np.testing.assert_allclose(batch, [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]], atol=1e-12)

@@ -153,6 +153,8 @@ class FakeDevice:
         self._keys = self._resolve_keys()
         self._channels, self._by_key, self._by_id = self._build_channels()
         self._services, self._svc_by_key = self._build_services()
+        self._script_lock = threading.Lock()
+        self._script: dict[str, Any] | None = None
 
     def _resolve_keys(self) -> set[str]:
         if self._streams is None:
@@ -218,6 +220,79 @@ class FakeDevice:
 
     def stall(self, seconds: float) -> None:
         self._stall_until = time.monotonic() + seconds
+
+    def script_motion(
+        self,
+        *,
+        position: Sequence[float] = (0.0, 0.0, 0.0),
+        position_end: Sequence[float] | None = None,
+        yaw: float = 0.0,
+        yaw_end: float | None = None,
+        imu_yaw: float = 0.0,
+        imu_yaw_end: float | None = None,
+        imu_accel: Sequence[float] = (9.80665, 0.0, 0.0),
+        imu_accel_pulse: Sequence[float] | None = None,
+        pulse_at: float = 0.0,
+        pulse_duration: float = 0.1,
+        duration: float = 0.0,
+        tracking_state: int = 2,
+    ) -> None:
+        """既定の円運動を止め、指定した姿勢と IMU を出す。duration>0 なら線形に補間する。"""
+        pos0 = np.asarray(position, dtype=np.float64).reshape(3).copy()
+        pos1 = pos0 if position_end is None else np.asarray(position_end, dtype=np.float64).reshape(3).copy()
+        yaw0 = float(yaw)
+        yaw1 = yaw0 if yaw_end is None else float(yaw_end)
+        imu0 = float(imu_yaw)
+        imu1 = imu0 if imu_yaw_end is None else float(imu_yaw_end)
+        accel = np.asarray(imu_accel, dtype=np.float64).reshape(3).copy()
+        pulse = None
+        if imu_accel_pulse is not None:
+            pulse = np.asarray(imu_accel_pulse, dtype=np.float64).reshape(3).copy()
+        with self._script_lock:
+            self._script = {
+                "t0": time.monotonic(),
+                "duration": float(duration),
+                "position": pos0,
+                "position_end": pos1,
+                "yaw": yaw0,
+                "yaw_end": yaw1,
+                "imu_yaw": imu0,
+                "imu_yaw_end": imu1,
+                "imu_accel": accel,
+                "imu_accel_pulse": pulse,
+                "pulse_at": float(pulse_at),
+                "pulse_duration": float(pulse_duration),
+                "tracking_state": int(tracking_state),
+            }
+
+    def _scripted_pose_imu(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int] | None:
+        with self._script_lock:
+            script = None if self._script is None else dict(self._script)
+        if script is None:
+            return None
+        now = time.monotonic()
+        duration = float(script["duration"])
+        alpha = 0.0 if duration <= 0.0 else min(1.0, max(0.0, (now - float(script["t0"])) / duration))
+        pos = script["position"] + alpha * (script["position_end"] - script["position"])
+        yaw = float(script["yaw"]) + alpha * (float(script["yaw_end"]) - float(script["yaw"]))
+        imu_yaw = float(script["imu_yaw"]) + alpha * (float(script["imu_yaw_end"]) - float(script["imu_yaw"]))
+        accel = np.array(script["imu_accel"], dtype=np.float64, copy=True)
+        pulse = script["imu_accel_pulse"]
+        if pulse is not None:
+            elapsed = now - float(script["t0"])
+            start = float(script["pulse_at"])
+            end = start + float(script["pulse_duration"])
+            if start <= elapsed < end:
+                accel = accel + pulse
+        return (
+            pos,
+            rpy_to_quaternion(0.0, 0.0, yaw),
+            accel,
+            rpy_to_quaternion(0.0, 0.0, imu_yaw),
+            int(script["tracking_state"]),
+        )
 
     def close_abruptly(self) -> None:
         with self._clients_lock:
@@ -532,23 +607,32 @@ class FakeDevice:
         depth_rate = float(self._params["depth.rate"])
         if self._should_send(pose_rate, frame_index):
             self._emit_pose(frame_index, t_wire)
-        if self._should_send(color_rate, frame_index):
+        if self._should_send(color_rate, frame_index) and "color_image" in self._by_key:
             self._emit_color(frame_index, t_wire)
-        if self._should_send(depth_rate, frame_index):
+        if self._should_send(depth_rate, frame_index) and (
+            "depth_image" in self._by_key or "depth_image_compressed" in self._by_key
+        ):
             self._emit_depth(frame_index, t_wire)
 
     def _emit_pose(self, frame_index: int, t_wire: int) -> None:
-        theta = frame_index * (2.0 * math.pi / 180.0)
-        x = math.cos(theta)
-        y = math.sin(theta)
-        q = rpy_to_quaternion(0.0, 0.0, theta)
+        scripted = self._scripted_pose_imu()
+        if scripted is None:
+            theta = frame_index * (2.0 * math.pi / 180.0)
+            x = math.cos(theta)
+            y = math.sin(theta)
+            z = 0.0
+            q = rpy_to_quaternion(0.0, 0.0, theta)
+            tracking_state = 2
+        else:
+            pos, q, _accel, _q_imu, tracking_state = scripted
+            x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
         header = {"stamp": _stamp(t_wire), "frame_id": f"{self.name}_odom"}
         twist_cov = [0.0] * 36
         twist_cov[0] = -1.0
         tracking = self._codec.make(
             "pocketsensor_msgs/msg/TrackingStatus",
             header={"stamp": _stamp(t_wire), "frame_id": f"{self.name}_link"},
-            state=2,
+            state=tracking_state,
             reason=0,
             origin_epoch=self._origin_epoch,
         )
@@ -563,7 +647,7 @@ class FakeDevice:
             child_frame_id=f"{self.name}_link",
             pose={
                 "pose": {
-                    "position": {"x": x, "y": y, "z": 0.0},
+                    "position": {"x": x, "y": y, "z": z},
                     "orientation": _quat_dict(q),
                 },
                 "covariance": [0.0] * 36,
@@ -575,7 +659,7 @@ class FakeDevice:
             "header": header,
             "child_frame_id": f"{self.name}_link",
             "transform": {
-                "translation": {"x": x, "y": y, "z": 0.0},
+                "translation": {"x": x, "y": y, "z": z},
                 "rotation": _quat_dict(q),
             },
         }
@@ -741,19 +825,27 @@ class FakeDevice:
     def _emit_imu(self, t_wire: int) -> None:
         header = {"stamp": _stamp(t_wire), "frame_id": f"{self.name}_imu_link"}
         cov_unset = [-1.0] + [0.0] * 8
+        scripted = self._scripted_pose_imu()
+        if scripted is None:
+            accel = {"z": 9.80665}
+            orientation: dict[str, float] = {"w": 1.0}
+        else:
+            _pos, _q, accel_v, q_imu, _tracking = scripted
+            accel = {"x": float(accel_v[0]), "y": float(accel_v[1]), "z": float(accel_v[2])}
+            orientation = _quat_dict(q_imu)
         raw = self._codec.make(
             "sensor_msgs/msg/Imu",
             header=header,
             orientation_covariance=cov_unset,
             angular_velocity={"z": 0.01},
-            linear_acceleration={"z": 9.80665},
+            linear_acceleration=accel,
         )
         fused = self._codec.make(
             "sensor_msgs/msg/Imu",
             header=header,
-            orientation={"w": 1.0},
+            orientation=orientation,
             angular_velocity={"z": 0.01},
-            linear_acceleration={"z": 9.80665},
+            linear_acceleration=accel,
         )
         payload_raw = self._codec.encode("sensor_msgs/msg/Imu", raw)
         payload = self._codec.encode("sensor_msgs/msg/Imu", fused)

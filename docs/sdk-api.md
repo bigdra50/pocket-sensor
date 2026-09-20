@@ -227,6 +227,10 @@ LiDAR の無い機種では、深度と confidence が一覧に現れない。
 | `pocketsensor info <source>` | 端末の情報、ストリーム、較正、時計合わせの状態を出す |
 | `pocketsensor record <source> -o run.mcap` | MCAP へ記録する |
 | `pocketsensor echo <source> <topic>` | 1 つのトピックを復号して表示する |
+| `pocketsensor check-axes <source>` | 端末を決まった向きへ動かしてもらい、座標軸と符号が約束どおりかを判定する |
+
+`check-axes` は、端末を取り付けたあとの確認に使う。
+指示に従って端末を前、左、上へ動かし、上から見て反時計回りに回すと、`odom` の位置、yaw の符号、IMU の比力の符号を判定して結果を表示する。
 
 ## 依存
 

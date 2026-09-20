@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import math
 import subprocess
 import sys
 import time
@@ -10,7 +12,9 @@ import pytest
 import pocketsensor as ps
 from pocketsensor.cli import main
 from pocketsensor.discovery import DiscoveredDevice
+from pocketsensor.streams import Stream
 from pocketsensor.testing.fake_device import FakeDevice
+from pocketsensor.units import STANDARD_GRAVITY
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -114,3 +118,116 @@ def test_gen_vectors_check() -> None:
         check=False,
     )
     assert result.returncode == 0
+
+
+def test_check_axes_missing_source_is_usage() -> None:
+    assert main(["check-axes"]) == 2
+
+
+def test_check_axes_negative_step_seconds_is_usage() -> None:
+    assert main(["check-axes", "ws://127.0.0.1:9", "--step-seconds", "-1"]) == 2
+
+
+def test_check_axes_negative_min_move_is_usage() -> None:
+    assert main(["check-axes", "ws://127.0.0.1:9", "--min-move", "-0.1"]) == 2
+
+
+class _CheckAxesDirector:
+    """countdown の sleep を境に FakeDevice の動きを切り替える。"""
+
+    def __init__(self, fake: FakeDevice) -> None:
+        self._ticks = 0
+        g = STANDARD_GRAVITY
+        self._plans = [
+            lambda: fake.script_motion(position=(0.0, 0.0, 0.0), imu_accel=(g, 0.0, 0.0)),
+            lambda: fake.script_motion(
+                position=(0.0, 0.0, 0.0),
+                position_end=(0.30, 0.0, 0.0),
+                duration=0.20,
+                imu_accel=(g, 0.0, 0.0),
+            ),
+            lambda: fake.script_motion(
+                position=(0.30, 0.0, 0.0),
+                position_end=(0.30, 0.30, 0.0),
+                duration=0.20,
+                imu_accel=(g, 0.0, 0.0),
+            ),
+            lambda: fake.script_motion(
+                position=(0.30, 0.30, 0.0),
+                position_end=(0.30, 0.30, 0.30),
+                duration=0.20,
+                imu_accel=(g, 0.0, 0.0),
+            ),
+            lambda: fake.script_motion(
+                position=(0.30, 0.30, 0.30),
+                yaw=0.0,
+                yaw_end=math.radians(50.0),
+                imu_yaw=0.0,
+                imu_yaw_end=math.radians(50.0),
+                duration=0.20,
+                imu_accel=(g, 0.0, 0.0),
+            ),
+            lambda: fake.script_motion(
+                position=(0.30, 0.30, 0.30),
+                yaw=math.radians(50.0),
+                imu_yaw=math.radians(50.0),
+                imu_accel=(g, 0.0, 0.0),
+                imu_accel_pulse=(0.0, 0.0, -5.0),
+                pulse_at=0.12,
+                pulse_duration=0.08,
+            ),
+        ]
+
+    def __call__(self, seconds: float) -> None:
+        if seconds >= 1.0:
+            self._ticks += 1
+            if self._ticks % 3 == 0:
+                step = self._ticks // 3 - 1
+                if 0 <= step < len(self._plans):
+                    self._plans[step]()
+
+
+def test_check_axes_writes_json_against_default_fake_device(tmp_path: Path, capsys) -> None:
+    out = tmp_path / "axes.json"
+    with FakeDevice(port=0, seed=0, streams={Stream.POSE, Stream.IMU}) as fake:
+        code = main(
+            ["check-axes", fake.url, "--json", str(out), "--step-seconds", "0.2"],
+            sleep=lambda _s: None,
+        )
+    assert code == 1
+    printed = capsys.readouterr().out
+    assert "still" in printed
+    payload = json.loads(out.read_text())
+    assert payload["device"]
+    assert payload["app_version"]
+    assert payload["session_id"]
+    assert payload["started_at"]
+    assert [step["name"] for step in payload["steps"]] == [
+        "still",
+        "forward",
+        "left",
+        "up",
+        "yaw",
+        "push",
+    ]
+    for step in payload["steps"]:
+        assert step["status"] in {"PASS", "FAIL", "SKIPPED"}
+        assert "measured" in step
+        assert "thresholds" in step
+
+
+def test_check_axes_happy_path_against_scripted_fake_device(tmp_path: Path, capsys) -> None:
+    out = tmp_path / "axes.json"
+    g = STANDARD_GRAVITY
+    with FakeDevice(port=0, seed=0, streams={Stream.POSE, Stream.IMU}) as fake:
+        fake.script_motion(position=(0.0, 0.0, 0.0), imu_accel=(g, 0.0, 0.0))
+        director = _CheckAxesDirector(fake)
+        code = main(
+            ["check-axes", fake.url, "--json", str(out), "--step-seconds", "0.35", "--min-move", "0.15"],
+            sleep=director,
+        )
+    assert code == 0
+    printed = capsys.readouterr().out
+    assert "PASS" in printed
+    payload = json.loads(out.read_text())
+    assert [step["status"] for step in payload["steps"]] == ["PASS"] * 6
