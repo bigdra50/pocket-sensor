@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Any, Final
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from pocketsensor.frames import LINK_TO_IMU_RPY, quat_to_matrix, quaternion_to_yaw, rpy_to_quaternion
+from pocketsensor.frames import LINK_TO_IMU_RPY, quat_to_matrix, rpy_to_quaternion
 from pocketsensor.types import TrackingState
 from pocketsensor.units import STANDARD_GRAVITY
 
@@ -231,9 +232,20 @@ def judge_translation(
     return _verdict(name, STATUS_PASS, measured, thresholds)
 
 
-def _yaw_series_deg(quats: NDArray[np.float64]) -> NDArray[np.float64]:
-    yaws = np.array([quaternion_to_yaw(q) for q in quats], dtype=np.float64)
-    return np.degrees(np.unwrap(yaws))
+def _yaw_about_vertical_deg(quats: NDArray[np.float64]) -> float:
+    """最初のサンプルから最後のサンプルまでに、基準の座標系の z（鉛直）まわりへ回った角度。
+
+    姿勢そのもののオイラー角は使わない。カメラ群を上にした横置きでは imu_link の x が真上を向き、
+    オイラー角の yaw が特異点になって、実機で +23 度の回転が -13 度と出た。
+    隣り合うサンプルの差の回転は端末の姿勢に依らないので、その z まわりの成分を足し合わせる。
+    差が小さいので、+-180 度の巻き戻りも起きない。
+    """
+    mats = [quat_to_matrix(q) for q in quats]
+    total = 0.0
+    for prev, cur in pairwise(mats):
+        step = cur @ prev.T
+        total += math.atan2(float(step[1, 0]), float(step[0, 0]))
+    return math.degrees(total)
 
 
 def judge_yaw(
@@ -241,7 +253,7 @@ def judge_yaw(
     imu_quats_xyzw: ArrayLike,
     tracking: ArrayLike | None,
 ) -> StepVerdict:
-    """上から見て反時計回りの yaw が増えること。+-180 deg の巻き戻りは unwrap する。"""
+    """上から見て反時計回りに回すと、姿勢と IMU の両方で鉛直まわりの角度が増えること。"""
     thresholds = {"min_delta_deg": MIN_YAW_DELTA_DEG}
     odom = _as_nx4(odom_quats_xyzw)
     imu = _as_nx4(imu_quats_xyzw)
@@ -252,10 +264,8 @@ def judge_yaw(
     if odom.shape[0] < 2 or imu.shape[0] < 2:
         return _verdict("yaw", STATUS_SKIPPED, measured, thresholds, "too few samples")
 
-    odom_deg = _yaw_series_deg(odom)
-    imu_deg = _yaw_series_deg(imu)
-    odom_delta = float(odom_deg[-1] - odom_deg[0])
-    imu_delta = float(imu_deg[-1] - imu_deg[0])
+    odom_delta = _yaw_about_vertical_deg(odom)
+    imu_delta = _yaw_about_vertical_deg(imu)
     measured["odom_yaw_delta_deg"] = odom_delta
     measured["imu_yaw_delta_deg"] = imu_delta
     if max(abs(odom_delta), abs(imu_delta)) < MIN_YAW_DELTA_DEG:

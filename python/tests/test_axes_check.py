@@ -13,7 +13,7 @@ from pocketsensor.axes_check import (
     judge_yaw,
     specific_force_imu_to_link,
 )
-from pocketsensor.frames import LINK_TO_IMU_RPY, quat_to_matrix, rpy_to_quaternion
+from pocketsensor.frames import LINK_TO_IMU_RPY, matrix_to_quat, quat_to_matrix, rpy_to_quaternion
 from pocketsensor.types import TrackingState
 
 _NS = 10_000_000
@@ -171,6 +171,34 @@ def test_yaw_correct_sign_passes() -> None:
     degs = np.linspace(0.0, 45.0, 20)
     odom = np.stack([_yaw_quat(d) for d in degs])
     imu = np.stack([_yaw_quat(d) for d in degs])
+    verdict = judge_yaw(odom, imu, np.full(len(degs), _NORMAL))
+    assert verdict.status == "PASS"
+    assert verdict.measured["odom_yaw_delta_deg"] == pytest.approx(45.0, abs=1e-6)
+    assert verdict.measured["imu_yaw_delta_deg"] == pytest.approx(45.0, abs=1e-6)
+
+
+def _imu_quats_for_link_yaw(degs: np.ndarray, link_base: np.ndarray) -> np.ndarray:
+    """link を鉛直まわりに回したときの、imu_link の向き（imu/data の orientation に当たる）。"""
+    link_to_imu = quat_to_matrix(rpy_to_quaternion(*LINK_TO_IMU_RPY))
+    return np.stack([matrix_to_quat(quat_to_matrix(_yaw_quat(d)) @ link_base @ link_to_imu) for d in degs])
+
+
+def test_yaw_of_imu_link_is_measured_about_the_vertical_in_landscape() -> None:
+    # カメラ群を上にした横置きでは imu_link の x が真上を向き、オイラー角の yaw は特異点になる
+    degs = np.linspace(0.0, 45.0, 20)
+    odom = np.stack([_yaw_quat(d) for d in degs])
+    imu = _imu_quats_for_link_yaw(degs, np.eye(3))
+    verdict = judge_yaw(odom, imu, np.full(len(degs), _NORMAL))
+    assert verdict.status == "PASS"
+    assert verdict.measured["imu_yaw_delta_deg"] == pytest.approx(45.0, abs=1e-6)
+
+
+def test_yaw_of_imu_link_is_measured_about_the_vertical_in_portrait() -> None:
+    # 縦置きは、link が前方の軸まわりに 90 度回った姿勢
+    degs = np.linspace(0.0, 45.0, 20)
+    portrait = quat_to_matrix(rpy_to_quaternion(math.pi / 2, 0.0, 0.0))
+    odom = np.stack([matrix_to_quat(quat_to_matrix(_yaw_quat(d)) @ portrait) for d in degs])
+    imu = _imu_quats_for_link_yaw(degs, portrait)
     verdict = judge_yaw(odom, imu, np.full(len(degs), _NORMAL))
     assert verdict.status == "PASS"
     assert verdict.measured["odom_yaw_delta_deg"] == pytest.approx(45.0, abs=1e-6)
