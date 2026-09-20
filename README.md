@@ -13,6 +13,7 @@ iPhone の RGB、LiDAR 深度、ARKit の自己位置、IMU、GNSS、地磁気�
 ## 現在の段階
 
 最初の段階のセンサー（姿勢、RGB、深度、IMU、地磁気、気圧、GNSS、電池）の配信と、Python の受け手 SDK が動く。
+深度と confidence は、無圧縮と PNG の可逆圧縮の 2 通りで配信する。
 
 | 項目 | 状態 |
 | --- | --- |
@@ -21,7 +22,8 @@ iPhone の RGB、LiDAR 深度、ARKit の自己位置、IMU、GNSS、地磁気�
 | Lichtblick と Foxglove からの接続 | 両者が内部で使うクライアントと復号器で、全チャンネルの復号を確認した。画面での表示は確かめていない |
 | USB での接続 | 擬似の usbmuxd では確認した。実機では確かめていない |
 | ROS 2 の中継 | 擬似の rclpy では確認した。ROS 2 の上では動かしていない |
-| H.264、深度の可逆圧縮、マイク、iPhone への出力 | 次の段階で足す |
+| 参照画像の anchor | 擬似デバイスでは確認した。実機では、参照画像を登録して映す確認をしていない |
+| H.264、マイク、iPhone への出力 | 次の段階で足す |
 
 実機での測定の記録は [docs/research/on-device-measurements.md](docs/research/on-device-measurements.md) にある。
 
