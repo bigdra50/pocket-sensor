@@ -117,7 +117,7 @@ public struct DeviceStreamSettings: Equatable, Sendable {
 public extension DeviceStream {
     /// 広告する全チャンネルを、契約の表から作る。
     ///
-    /// 受け手は、この一覧で端末が何を出せるかを開く前に知る。
+    /// クライアントは、この一覧で端末が何を出せるかを開く前に知る。
     /// 手で列挙すると、チャンネルを足したときに載せ忘れるので、契約から作る。
     static func all(
         names: FrameNames,

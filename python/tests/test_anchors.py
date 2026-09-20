@@ -99,7 +99,7 @@ def test_decode_anchors_selection_rules(codec) -> None:
     assert samples[1].t_device_ns == t_ns + 1
     assert samples[1].child_frame_id == "pocketsensor_anchor_door"
     np.testing.assert_allclose(samples[1].position, [2.0, -0.5, 1.0])
-    # 四元数の符号は端末が揃えて送る。受け手は姿勢と同じく、届いた値をそのまま返す。
+    # 四元数の符号は端末が揃えて送る。クライアントは姿勢と同じく、届いた値をそのまま返す。
     np.testing.assert_allclose(samples[1].orientation_xyzw, _YAW_90)
 
 

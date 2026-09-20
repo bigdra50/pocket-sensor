@@ -115,7 +115,7 @@ group = "arframe"
 latched = false
 stage = 1
 
-# 深度と confidence の可逆圧縮（PNG）。中身は無圧縮のチャンネルと同じで、受け手が購読で選ぶ。
+# 深度と confidence の可逆圧縮（PNG）。中身は無圧縮のチャンネルと同じで、クライアントが購読で選ぶ。
 # トピック名と format は image_transport の compressedDepth と compressed の作法に合わせる。
 [[channel]]
 key = "depth_image_compressed"

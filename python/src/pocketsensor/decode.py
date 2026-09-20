@@ -224,7 +224,7 @@ def decode_anchors(tf_msg: Any, device_name: str) -> list[AnchorSample]:
                 name=name,
                 t_device_ns=stamp_to_ns(tf.header.stamp),
                 position=_vec3(tf.transform.translation),
-                # 符号は端末が揃えて送る（w >= 0）。姿勢と同じく、受け手では作り変えない。
+                # 符号は端末が揃えて送る（w >= 0）。姿勢と同じく、クライアントでは作り変えない。
                 orientation_xyzw=_quat(tf.transform.rotation),
                 frame_id=parent,
                 child_frame_id=child,

@@ -1,4 +1,4 @@
-"""受け手が扱う値の型。配列は numpy。"""
+"""クライアントが扱う値の型。配列は numpy。"""
 
 from __future__ import annotations
 

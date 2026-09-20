@@ -137,7 +137,7 @@ public enum MessageBuilders {
     /// 姿勢の変換と、この回に送る anchor を 1 つの `/tf` のメッセージにまとめる。姿勢を送る回にだけ呼ぶ。
     ///
     /// anchor を姿勢と同じ回にだけ載せるので、anchor の時刻は `odom` のどれかの時刻と必ず一致する。
-    /// 受け手は、同じ時刻の姿勢と組にして、端末から見た anchor の位置を求められる。
+    /// クライアントは、同じ時刻の姿勢と組にして、端末から見た anchor の位置を求められる。
     /// 別々のメッセージにしないのは、`/tf` の背圧が最新 1 件の保持で、片方が捨てられるため。
     public static func tfWithAnchors(
         stampNs: UInt64,
@@ -318,7 +318,7 @@ public enum MessageBuilders {
             horizontalAccuracy: horizontalAccuracy,
             verticalAccuracy: verticalAccuracy
         )
-        // 測位なしの値を残すと、受け手がそのまま使ってしまう。
+        // 測位なしの値を残すと、クライアントがそのまま使ってしまう。
         if horizontalAccuracy < 0 {
             return SensorMsgs.NavSatFix(
                 header: WireStamp.header(stampNs: stampNs, frameId: names.link),

@@ -1,4 +1,4 @@
-"""往復 4 時刻から端末時計と受け手時計のずれを推定する。"""
+"""往復 4 時刻から端末時計とクライアント時計のずれを推定する。"""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class ClockSample:
 
     @property
     def offset(self) -> float:
-        # 端末時計から受け手時計を引いた値
+        # 端末時計からクライアント時計を引いた値
         return ((self.t2 - self.t1) + (self.t3 - self.t4)) / 2.0
 
 
@@ -146,9 +146,9 @@ class ClockView:
 
     @property
     def wall_offset_ns(self) -> float:
-        """端末の壁時計から受け手の壁時計を引いた値。
+        """端末の壁時計からクライアントの壁時計を引いた値。
 
-        offset_ns は受け手の単調時計が相手なので、起動からの秒数と壁時計の差が入った巨大な値になる。
+        offset_ns はクライアントの単調時計が相手なので、起動からの秒数と壁時計の差が入った巨大な値になる。
         人が読む用途と、2 台の壁時計の合い具合を見る用途には、こちらを使う。
         """
         with self._guard():

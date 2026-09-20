@@ -257,7 +257,7 @@ struct ContentView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("OFF にした区画のセンサーは、受け手が購読したときだけ動きます。")
+                    Text("OFF にした区画のセンサーは、クライアントが購読したときだけ動きます。")
                 }
                 Section {
                     Toggle("Pose を表示", isOn: displayBinding(\.pose))

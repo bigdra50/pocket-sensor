@@ -20,7 +20,7 @@ public enum MagCalibration: String, Equatable, Sendable {
     }
 }
 
-/// 位置情報の許可の状態。許可されるまで GNSS は 1 件も届かないので、受け手が理由を知るために流す。
+/// 位置情報の許可の状態。許可されるまで GNSS は 1 件も届かないので、クライアントが理由を知るために流す。
 public enum LocationAuthorization: String, Equatable, Sendable {
     case unknown
     case notDetermined = "not_determined"
