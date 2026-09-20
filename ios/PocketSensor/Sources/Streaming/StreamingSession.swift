@@ -20,6 +20,7 @@ final class StreamingSession: @unchecked Sendable {
     private var motionRunning = false
     private var locationRunning = false
     private var batteryRunning = false
+    private var monitorOn: Bool
     private let sensorLock = NSLock()
 
     var onServerState: ((String, UInt16?) -> Void)?
@@ -32,7 +33,8 @@ final class StreamingSession: @unchecked Sendable {
         motion: MotionCapture,
         location: LocationCapture,
         battery: BatteryCapture,
-        thermal: ProcessInfo.ThermalState
+        thermal: ProcessInfo.ThermalState,
+        monitorOn: Bool = true
     ) {
         sessionId = UUID().uuidString
         let anchor = SessionClocks.makeAnchor()
@@ -49,6 +51,7 @@ final class StreamingSession: @unchecked Sendable {
         self.motion = motion
         self.location = location
         self.battery = battery
+        self.monitorOn = monitorOn
         runtime = StreamingRuntime(server: server, anchor: anchor, sessionId: sessionId, deviceName: deviceName)
         runtime.setThermal(StreamingMap.thermal(thermal))
         arFrames = ARFramePublisher(runtime: runtime)
@@ -97,6 +100,7 @@ final class StreamingSession: @unchecked Sendable {
         if ARKitCapture.isSupported {
             arkit.start(reset: true)
         }
+        refreshSensors()
     }
 
     func stop() {
@@ -172,16 +176,53 @@ final class StreamingSession: @unchecked Sendable {
         server.stats().clients
     }
 
+    func setMonitorOn(_ on: Bool) {
+        sensorLock.lock()
+        monitorOn = on
+        sensorLock.unlock()
+        refreshSensors()
+    }
+
+    func panelStats() -> (
+        ratesHz: [String: Double],
+        drops: [String: Int],
+        clients: Int,
+        originEpoch: UInt32,
+        imuReference: ImuReferenceFrame,
+        clock: ClockCheckStatus,
+        magCalibration: MagCalibration
+    ) {
+        let stats = server.stats()
+        let nowS = CACurrentMediaTime()
+        var rates: [String: Double] = [:]
+        for (key, var meter) in stats.sentRateByChannelKey {
+            rates[key] = meter.hz(now: nowS)
+        }
+        let sessionRates = runtime.rates()
+        return (
+            rates,
+            stats.dropsByChannelKey,
+            stats.clients,
+            sessionRates.epoch,
+            sessionRates.reference,
+            sessionRates.clock,
+            sessionRates.magCalibration
+        )
+    }
+
     private func refreshSensors() {
-        let wantMotion =
+        let subscribedMotion =
             server.hasSubscribers("imu_raw")
             || server.hasSubscribers("imu")
             || server.hasSubscribers("mag")
             || server.hasSubscribers("pressure")
-        let wantLocation = server.hasSubscribers("gnss_fix") || server.hasSubscribers("gnss_time_reference")
-        let wantBattery = server.hasSubscribers("battery")
+        let subscribedLocation = server.hasSubscribers("gnss_fix") || server.hasSubscribers("gnss_time_reference")
+        let subscribedBattery = server.hasSubscribers("battery")
 
         sensorLock.lock()
+        let wantMotion = SensorDemand.motion(subscribed: subscribedMotion, monitorOn: monitorOn)
+        let wantLocation = SensorDemand.gnss(subscribed: subscribedLocation, monitorOn: monitorOn)
+        let wantBattery = SensorDemand.battery(subscribed: subscribedBattery, monitorOn: monitorOn)
         let startMotion = wantMotion && !motionRunning
         let stopMotion = !wantMotion && motionRunning
         let startLocation = wantLocation && !locationRunning

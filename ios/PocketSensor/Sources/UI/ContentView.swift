@@ -1,7 +1,11 @@
+import PocketSensorCore
 import SwiftUI
 
-/// 計測パネル。横持ちは Link と Tracking の区画を左右に、縦持ちは上下に並べる。
-/// ヘッダーは全幅、本文は左寄せの密な区画（端から端へ引き延ばさない）。
+/// 配信している値を人が確かめる計器盤。数値は 5 Hz の snapshot。
+///
+/// 数値は 7 字セルを空白で右寄せした固定幅文字列。frame で切らず、字幅で揃える。
+/// footnote 相当 12 pt モノスペースの 0.6 em は 7.2 pt/字。
+/// quat 4 セル + 間隔 1 字 × 3 = 31 字 × 7.2 = 223.2 pt。ラベル 52 + 間隔 6 = 281.2 pt。300 pt に収まる。
 struct ContentView: View {
     @StateObject private var controller = AppController()
     @StateObject private var interfaceOrientation = InterfaceOrientationObserver()
@@ -10,12 +14,11 @@ struct ContentView: View {
     @State private var editingName = false
     @State private var nameDraft = ""
 
-    /// ヒートマップの長辺。縦持ちは Link と Tracking の下に積むので、画面の高さに収まるよう小さくする
-    private static let heatmapLongLandscape: CGFloat = 200
-    private static let heatmapLongPortrait: CGFloat = 160
+    private static let heatmapLongLandscape: CGFloat = 140
+    private static let heatmapLongPortrait: CGFloat = 120
     private static let panelCorner: CGFloat = 8
-    /// 区画のあいだ。広げすぎると視線が飛ぶ
-    private static let columnWidth: CGFloat = 268
+    private static let labelWidth: CGFloat = 52
+    private static let valueSize: CGFloat = 12
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -23,13 +26,11 @@ struct ContentView: View {
             Rectangle()
                 .fill(Color.primary.opacity(0.12))
                 .frame(height: 1)
-            // iPhone では横持ちのときだけ縦方向の size class が compact になる
             if verticalSizeClass == .compact {
                 landscapeBody
             } else {
                 portraitBody
             }
-            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
@@ -68,113 +69,146 @@ struct ContentView: View {
         }
         .padding(.horizontal, 8)
         .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.bottom, 8)
         .safeAreaPadding(.horizontal, 12)
     }
 
     private var landscapeBody: some View {
-        ZStack(alignment: .topLeading) {
-            // Link / Tracking は常に同じ位置。プレビューは右に重ねるだけ
-            landscapeColumns
-                .padding(.top, 22)
-                .padding(.bottom, 16)
-                .padding(.leading, 8)
-                .padding(.trailing, 20)
-                .safeAreaPadding(.horizontal, 12)
-            if controller.previewVisible {
-                landscapePreview
-                    .padding(.top, 22)
-                    .padding(.trailing, 20)
-                    .safeAreaPadding(.trailing, 12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .allowsHitTesting(false)
+        HStack(alignment: .top, spacing: 0) {
+            columnScroll {
+                poseColumn
+                horizontalRule
+                imuColumn
             }
+            columnDivider
+            columnScroll {
+                if controller.previewVisible {
+                    depthSection(long: Self.heatmapLongLandscape)
+                    horizontalRule
+                }
+                linkColumn
+                horizontalRule
+                environmentColumn
+                horizontalRule
+                streamsColumn
+            }
+        }
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+        .padding(.leading, 8)
+        .padding(.trailing, 16)
+        .safeAreaPadding(.leading, 12)
+        .safeAreaPadding(.trailing, 16)
+    }
+
+    private var portraitBody: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                linkColumn
+                horizontalRule
+                poseColumn
+                if controller.previewVisible {
+                    horizontalRule
+                    depthSection(long: Self.heatmapLongPortrait)
+                }
+                horizontalRule
+                imuColumn
+                horizontalRule
+                environmentColumn
+                horizontalRule
+                streamsColumn
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
+            .padding(.leading, 8)
+            .padding(.trailing, 16)
+            .safeAreaPadding(.horizontal, 12)
         }
     }
 
-    /// 縦持ちは上から積む。プレビューは最後に足すので、開いても Link / Tracking の位置は変わらない
-    private var portraitBody: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            linkColumn
-            horizontalRule
-            trackingColumn
-            if controller.previewVisible {
-                horizontalRule
-                portraitPreview
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 16)
-        .padding(.bottom, 16)
-        .padding(.leading, 8)
-        .padding(.trailing, 20)
-        .safeAreaPadding(.horizontal, 12)
+    private var metricSpacing: CGFloat {
+        verticalSizeClass == .compact ? 3 : 4
+    }
+
+    private var sectionSpacing: CGFloat {
+        verticalSizeClass == .compact ? 4 : 6
     }
 
     private var horizontalRule: some View {
         Rectangle()
             .fill(Color.primary.opacity(0.1))
             .frame(height: 1)
-            .padding(.vertical, 12)
+            .padding(.vertical, verticalSizeClass == .compact ? 6 : 8)
     }
 
-    private var landscapeColumns: some View {
-        HStack(alignment: .top, spacing: 0) {
-            linkColumn
-                .frame(width: Self.columnWidth, alignment: .topLeading)
-            Rectangle()
-                .fill(Color.primary.opacity(0.1))
-                .frame(width: 1)
-                .padding(.horizontal, 20)
-                .frame(maxHeight: 220)
-            trackingColumn
-                .frame(width: Self.columnWidth, alignment: .topLeading)
-            Spacer(minLength: 0)
+    private var columnDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.1))
+            .frame(width: 1)
+            .padding(.horizontal, 12)
+            .frame(maxHeight: .infinity)
+    }
+
+    private func columnScroll<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: sectionSpacing) {
+                content()
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.bottom, 4)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var linkColumn: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Link")
-            VStack(alignment: .leading, spacing: 6) {
-                metric("server", serverText)
-                metric("bonjour", bonjourText)
-                metric("clients", "\(controller.clients)")
+        VStack(alignment: .leading, spacing: sectionSpacing) {
+            HStack(alignment: .center, spacing: 8) {
+                sectionTitle("Link")
+                Spacer(minLength: 0)
+                // スイッチだけでは何を切り替えるのか分からないので、名前を添える。
+                Text("monitor")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Toggle("Monitor", isOn: Binding(
+                    get: { controller.monitorOn },
+                    set: { controller.setMonitorOn($0) }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .scaleEffect(0.72, anchor: .trailing)
+                .frame(height: 18, alignment: .trailing)
+            }
+            VStack(alignment: .leading, spacing: metricSpacing) {
+                envValue(serverClientsText)
                 ForEach(controller.linkAddresses, id: \.self) { row in
-                    metric(row.name, row.address)
+                    envValue("\(row.name)  \(row.address)")
                 }
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text("name")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 72, alignment: .leading)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(controller.deviceName)
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundStyle(.primary)
+                        .font(.system(.footnote, design: .monospaced))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Button("変更") {
                         nameDraft = controller.deviceName
                         editingName = true
                     }
-                    .font(.system(.caption))
+                    .font(.system(.caption2))
                     .buttonStyle(.borderless)
+                    Spacer(minLength: 0)
                 }
             }
         }
     }
 
-    private var serverText: String {
+    private var serverClientsText: String {
+        let server: String
         if let port = controller.serverPort {
-            return "\(controller.serverState)  :\(port)"
+            server = "\(controller.serverState) :\(port)"
+        } else {
+            server = controller.serverState
         }
-        return controller.serverState
-    }
-
-    private var bonjourText: String {
-        let name = controller.deviceName
-        let trimmed = name.count > 18 ? String(name.prefix(16)) + "…" : name
-        return "\(trimmed)  _pocketsensor._tcp"
+        return "server \(server)   clients \(controller.clients)"
     }
 
     private var nameEditor: some View {
@@ -208,52 +242,139 @@ struct ContentView: View {
         .presentationDetents([.medium])
     }
 
-    private var trackingColumn: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Tracking")
-            Text(controller.tracking)
-                .font(.system(.title3, design: .monospaced, weight: .semibold))
-                .foregroundStyle(trackingColor)
-                .padding(.top, 2)
-                .padding(.bottom, 6)
-            VStack(alignment: .leading, spacing: 6) {
-                metric("pose", String(format: "%.1f Hz", controller.poseHz))
-                metric("color", String(format: "%.1f Hz", controller.colorHz))
-                metric("depth", controller.depthCenterM.map { String(format: "%.1f Hz  %.2f m", controller.depthHz, $0) } ?? String(format: "%.1f Hz", controller.depthHz))
-                metric("imu", String(format: "%.1f Hz", controller.imuHz))
-                metric("origin", "\(controller.originEpoch)")
-                metric("thermal", controller.thermal)
-                metric("battery", controller.batteryText)
+    private var poseColumn: some View {
+        VStack(alignment: .leading, spacing: sectionSpacing) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                sectionTitle("Pose")
+                Spacer(minLength: 0)
+                Text(controller.snapshot.tracking)
+                    .font(.system(.caption, design: .monospaced, weight: .semibold))
+                    .foregroundStyle(trackingColor)
+                Button("Reset origin") {
+                    controller.resetOrigin()
+                }
+                .font(.system(.caption2))
+                .buttonStyle(.borderless)
             }
-            Button("Reset origin") {
-                controller.resetOrigin()
-            }
-            .buttonStyle(.bordered)
-            .padding(.top, 8)
+            axisHeader(["x", "y", "z"])
+            vectorRow("pos", Readout.vectorCells(controller.snapshot.positionM, fractionDigits: 2), unit: "m")
+            vectorRow("rpy", Readout.rpyCells(controller.snapshot.poseRPYDeg), unit: "deg")
+            axisHeader(["x", "y", "z", "w"])
+            vectorRow("quat", Readout.quaternionCells(controller.snapshot.orientation), unit: "")
+            envRow("origin", "\(controller.snapshot.originEpoch)")
         }
     }
 
-    private var landscapePreview: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Depth")
-            depthHeatmap(long: Self.heatmapLongLandscape)
-            poseReadout(width: Self.heatmapLongLandscape)
+    private var imuColumn: some View {
+        VStack(alignment: .leading, spacing: sectionSpacing) {
+            sectionTitle("IMU")
+            axisHeader(["x", "y", "z"])
+            vectorRow("accel", Readout.vectorCells(controller.snapshot.specificForceMps2, fractionDigits: 2), unit: "m/s2")
+            vectorRow("gyro", Readout.vectorCells(controller.snapshot.angularVelocityRadS, fractionDigits: 3), unit: "rad/s")
+            vectorRow("rpy", Readout.rpyCells(controller.snapshot.imuRPYDeg), unit: "deg")
+            vectorRow(
+                "mag",
+                Readout.vectorCells(controller.snapshot.magneticFieldUT, fractionDigits: 1),
+                unit: "uT",
+                trailing: controller.snapshot.magCalibration.rawValue
+            )
         }
     }
 
-    /// 縦持ちは高さが足りないので、姿勢の数値はヒートマップの右に置く
-    private var portraitPreview: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Depth")
-            HStack(alignment: .top, spacing: 12) {
-                depthHeatmap(long: Self.heatmapLongPortrait)
-                poseReadout(width: nil)
+    private var environmentColumn: some View {
+        VStack(alignment: .leading, spacing: sectionSpacing) {
+            sectionTitle("Environment")
+            VStack(alignment: .leading, spacing: metricSpacing) {
+                envRow(
+                    "press",
+                    Readout.pressureAltitudeLine(
+                        pa: controller.snapshot.pressurePa,
+                        relativeAltitudeM: controller.snapshot.relativeAltitudeM
+                    )
+                )
+                if let latlon = Readout.gnssLatLon(
+                    latitude: controller.snapshot.gnssLatitude,
+                    longitude: controller.snapshot.gnssLongitude
+                ), let acc = controller.snapshot.gnssHorizontalAccuracyM, acc >= 0 {
+                    envRow("gnss", latlon)
+                    envRow(
+                        "acc",
+                        Readout.gnssAccuracyLine(horizontalM: acc, altitudeM: controller.snapshot.gnssAltitudeM)
+                    )
+                } else {
+                    envRow(
+                        "gnss",
+                        Readout.gnss(
+                            latitude: controller.snapshot.gnssLatitude,
+                            longitude: controller.snapshot.gnssLongitude,
+                            horizontalAccuracyM: controller.snapshot.gnssHorizontalAccuracyM,
+                            authorization: controller.snapshot.locationAuthorization
+                        )
+                    )
+                }
+                envRow(
+                    "batt",
+                    Readout.batteryThermal(
+                        level: controller.snapshot.batteryLevel,
+                        state: controller.snapshot.batteryState,
+                        thermal: controller.snapshot.thermal
+                    )
+                )
+                envRow("clock", Readout.clock(controller.snapshot.clock))
             }
+        }
+    }
+
+    private var streamsColumn: some View {
+        VStack(alignment: .leading, spacing: sectionSpacing) {
+            sectionTitle("Streams")
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 8, alignment: .leading),
+                    GridItem(.flexible(), spacing: 8, alignment: .leading),
+                ],
+                alignment: .leading,
+                spacing: metricSpacing
+            ) {
+                ForEach(Readout.streamPanelRows, id: \.label) { row in
+                    streamCell(row)
+                }
+            }
+        }
+    }
+
+    private func streamCell(_ row: (label: String, keys: [String])) -> some View {
+        let hz = Readout.combinedRateHz(keys: row.keys, rates: controller.snapshot.ratesHz)
+        let drops = Readout.combinedDrops(keys: row.keys, drops: controller.snapshot.drops)
+        return HStack(spacing: 4) {
+            Text(Readout.streamRate(label: row.label, hz: hz))
+                .font(.system(size: Self.valueSize, design: .monospaced))
+                .fixedSize(horizontal: true, vertical: false)
+            if let drop = Readout.streamDrop(drops) {
+                Text(drop)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func depthSection(long: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionTitle("Depth")
+            depthHeatmap(long: long)
+            Text(
+                controller.snapshot.depthCenterM.map { String(format: "center  %.2f m", $0) }
+                    ?? "center  \(Readout.missing)"
+            )
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(.secondary)
         }
     }
 
     private var trackingColor: Color {
-        switch controller.tracking {
+        switch controller.snapshot.tracking {
         case "normal": return Color(red: 0.12, green: 0.55, blue: 0.28)
         case let s where s.hasPrefix("limited"): return Color(red: 0.85, green: 0.45, blue: 0.05)
         default: return .primary
@@ -266,18 +387,61 @@ struct ContentView: View {
             .foregroundStyle(.primary.opacity(0.55))
     }
 
-    private func metric(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(label)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
-            Text(value)
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+    private func axisHeader(_ axes: [String]) -> some View {
+        let padded = axes.map { axis in
+            String(repeating: " ", count: max(0, Readout.cellWidth - axis.count)) + axis
+        }.joined(separator: " ")
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Color.clear.frame(width: Self.labelWidth, height: 1)
+            Text(padded)
+                .font(.system(size: Self.valueSize, design: .monospaced))
+                .fixedSize(horizontal: true, vertical: false)
+            Spacer(minLength: 0)
         }
+        .foregroundStyle(.secondary)
+    }
+
+    private func vectorRow(_ label: String, _ cells: [String], unit: String, trailing: String? = nil) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(label)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: Self.labelWidth, alignment: .leading)
+            Text(cells.joined(separator: " "))
+                .font(.system(size: Self.valueSize, design: .monospaced))
+                .monospacedDigit()
+                .fixedSize(horizontal: true, vertical: false)
+            if !unit.isEmpty {
+                Text(unit)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            if let trailing {
+                Text(trailing)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func envRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(label)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: Self.labelWidth, alignment: .leading)
+            envValue(value)
+        }
+    }
+
+    private func envValue(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: Self.valueSize, design: .monospaced))
+            .monospacedDigit()
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder
@@ -291,7 +455,7 @@ struct ContentView: View {
                     .resizable()
                     .interpolation(.none)
                     .overlay(alignment: .topLeading) {
-                        Text("\(DepthPreview.nearM)–\(DepthPreview.farM) m")
+                        Text(String(format: "%.2f–%.1f m", DepthPreview.nearM, DepthPreview.farM))
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .padding(4)
                             .background(.black.opacity(0.45))
@@ -307,29 +471,5 @@ struct ContentView: View {
         .frame(width: size.width, height: size.height)
         .clipShape(shape)
         .overlay(shape.strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
-    }
-
-    /// `width` が nil なら文字列の幅に合わせる
-    private func poseReadout(width: CGFloat?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(poseText)
-            Text(quatText)
-        }
-        .font(.system(size: 11, design: .monospaced))
-        .foregroundStyle(.secondary)
-        .padding(8)
-        .frame(width: width, alignment: .leading)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: Self.panelCorner, style: .continuous))
-    }
-
-    private var poseText: String {
-        guard let p = controller.position else { return "pos  —" }
-        return String(format: "pos  %+.2f %+.2f %+.2f", p.x, p.y, p.z)
-    }
-
-    private var quatText: String {
-        guard let q = controller.orientation else { return "quat —" }
-        let v = q.vector
-        return String(format: "quat %+.2f %+.2f %+.2f %+.2f", v.x, v.y, v.z, v.w)
     }
 }

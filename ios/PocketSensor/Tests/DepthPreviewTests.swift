@@ -61,4 +61,11 @@ final class DepthPreviewTests: XCTestCase {
         // (1,1) 近端 → 赤
         XCTAssertEqual(Array(pixels[12..<16]), [255, 0, 0, 255])
     }
+
+    func testDemoGradientIsLidarSizedAndNotEmpty() {
+        let image = DepthPreview.demoGradient()
+        XCTAssertEqual(Int(image.size.width.rounded()), 256)
+        XCTAssertEqual(Int(image.size.height.rounded()), 192)
+        XCTAssertNotNil(image.cgImage)
+    }
 }

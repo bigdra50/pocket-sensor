@@ -45,6 +45,33 @@ public enum Frames {
         return simd_quatd(vector: v)
     }
 
+    /// ROS の固定軸 RPY を度で返す。R = Rz(yaw) Ry(pitch) Rx(roll)。
+    /// yaw は (-180, 180]。pitch は ±90 で打ち切る。ジンバルロックでも NaN は出さない。
+    public static func rpyDegrees(from q: simd_quatd) -> (roll: Double, pitch: Double, yaw: Double) {
+        let n = canonical(q)
+        let x = n.vector.x
+        let y = n.vector.y
+        let z = n.vector.z
+        let w = n.vector.w
+        let sinp = 2.0 * (w * y - z * x)
+        let pitchRad: Double
+        if sinp >= 1.0 {
+            pitchRad = .pi / 2
+        } else if sinp <= -1.0 {
+            pitchRad = -.pi / 2
+        } else {
+            pitchRad = asin(sinp)
+        }
+        let rollRad = atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
+        let yawRad = atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+        let toDeg = 180.0 / Double.pi
+        return (
+            roll: Units.wrapToPi(rollRad) * toDeg,
+            pitch: pitchRad * toDeg,
+            yaw: Units.wrapToPi(yawRad) * toDeg
+        )
+    }
+
     /// ROS の固定軸 RPY。R = Rz(yaw) Ry(pitch) Rx(roll)。
     public static func quaternion(roll: Double, pitch: Double, yaw: Double) -> simd_quatd {
         let cr = cos(roll)

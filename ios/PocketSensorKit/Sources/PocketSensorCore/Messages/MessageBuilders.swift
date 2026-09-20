@@ -251,6 +251,19 @@ public enum MessageBuilders {
     }
 
     /// Core Motion の xTrueNorthZVertical は North-West-Up。REP-145 の East-North-Up へは Rz(+π/2) を左から掛ける。
+    public static func fusedOrientation(
+        attitudeDeviceToReference: simd_quatd,
+        reference: ImuReferenceFrame
+    ) -> simd_quatd {
+        switch reference {
+        case .arbitrary:
+            return Frames.canonical(attitudeDeviceToReference)
+        case .trueNorth:
+            let rz = Frames.quaternion(roll: 0, pitch: 0, yaw: .pi / 2)
+            return Frames.canonical(rz * attitudeDeviceToReference)
+        }
+    }
+
     public static func imuFused(
         stampNs: UInt64,
         names: FrameNames,
@@ -260,14 +273,10 @@ public enum MessageBuilders {
         gravityG: SIMD3<Double>,
         rotationRateRadS: SIMD3<Double>
     ) -> SensorMsgs.Imu {
-        let orientation: simd_quatd
-        switch reference {
-        case .arbitrary:
-            orientation = Frames.canonical(attitudeDeviceToReference)
-        case .trueNorth:
-            let rz = Frames.quaternion(roll: 0, pitch: 0, yaw: .pi / 2)
-            orientation = Frames.canonical(rz * attitudeDeviceToReference)
-        }
+        let orientation = fusedOrientation(
+            attitudeDeviceToReference: attitudeDeviceToReference,
+            reference: reference
+        )
         let accel = Units.accelGToMps2(userAccelG + gravityG)
         return SensorMsgs.Imu(
             header: WireStamp.header(stampNs: stampNs, frameId: names.imuLink),

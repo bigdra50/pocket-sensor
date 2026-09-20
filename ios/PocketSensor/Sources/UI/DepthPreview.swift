@@ -126,4 +126,19 @@ enum DepthPreview {
         ) else { return nil }
         return UIImage(cgImage: cgImage)
     }
+
+    /// Simulator のレイアウト確認用。近端から遠端への横勾配。
+    static func demoGradient() -> UIImage {
+        let width = 256
+        let height = 192
+        var depth = [Float](repeating: 0, count: width * height)
+        let span = farM - nearM
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                depth[y * width + x] = nearM + span * Float(x) / Float(width - 1)
+            }
+        }
+        return image(rgba: rgba(depth: depth, width: width, height: height), width: width, height: height)
+            ?? UIImage()
+    }
 }

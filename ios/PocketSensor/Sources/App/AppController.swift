@@ -8,26 +8,16 @@ import UIKit
 /// ARKit と Core Motion などの capture を持ち、前面セッションを配信サーバーへ繋ぐ。
 @MainActor
 final class AppController: ObservableObject {
-    @Published private(set) var tracking = "unavailable"
-    @Published private(set) var deliveredFps = 0.0
-    @Published private(set) var poseHz = 0.0
-    @Published private(set) var colorHz = 0.0
-    @Published private(set) var depthHz = 0.0
-    @Published private(set) var imuHz = 0.0
-    @Published private(set) var originEpoch = 0
-    @Published private(set) var depthCenterM: Float?
-    @Published private(set) var thermal = ProcessInfo.processInfo.thermalState.wireName
-    @Published private(set) var batteryText = "—"
+    @Published private(set) var snapshot = SensorSnapshot()
     @Published private(set) var previewVisible = false
     @Published private(set) var depthPreview: UIImage?
-    @Published private(set) var position: SIMD3<Float>?
-    @Published private(set) var orientation: simd_quatf?
     @Published private(set) var arkitSupported = ARKitCapture.isSupported
     @Published private(set) var serverState = "stopped"
     @Published private(set) var serverPort: UInt16?
     @Published private(set) var clients = 0
     @Published private(set) var deviceName = DeviceName.defaultValue
     @Published private(set) var linkAddresses: [LinkAddresses.Record] = []
+    @Published private(set) var monitorOn = true
 
     let arkit = ARKitCapture()
     let motion = MotionCapture()
@@ -35,6 +25,7 @@ final class AppController: ObservableObject {
     let battery = BatteryCapture()
     let thermalMonitor = ThermalMonitor()
     let nameStore = DeviceNameStore()
+    let monitorStore = MonitorStore()
 
     private var session: StreamingSession?
     private var probe: Probe?
@@ -42,14 +33,33 @@ final class AppController: ObservableObject {
     private var didStart = false
     private var previewEnabled = false
     private let probeMode = ProcessInfo.processInfo.arguments.contains("-PocketSensorProbe")
-    private let statsLock = NSLock()
-    private var lastTracking = "unavailable"
-    private var lastDepthCenter: Float?
-    private var framesInWindow = 0
+    private let demoValues = ProcessInfo.processInfo.arguments.contains("-PocketSensorDemoValues")
+    private let demoPreview = ProcessInfo.processInfo.arguments.contains("-PocketSensorDemoPreview")
+    private let sampleBox = SampleBox()
     private var lastDepthSummaryAt: TimeInterval = 0
+
+    private static let demoDeviceName = "pocketsensor_lab_01"
+    private static let demoAddresses = [
+        LinkAddresses.Record(name: "en0", address: "192.168.10.123"),
+        LinkAddresses.Record(name: "en2", address: "169.254.12.34"),
+    ]
 
     init() {
         deviceName = nameStore.load()
+        monitorOn = monitorStore.load()
+        if demoValues {
+            snapshot = .demo
+            deviceName = Self.demoDeviceName
+            linkAddresses = Self.demoAddresses
+            serverState = "ready"
+            serverPort = 8765
+            clients = 1
+        }
+        if demoPreview {
+            previewVisible = true
+            previewEnabled = true
+            depthPreview = DepthPreview.demoGradient()
+        }
         if probeMode {
             start()
         }
@@ -66,30 +76,31 @@ final class AppController: ObservableObject {
         }
         motion.onAccel { [weak self] sample in
             self?.session?.handleAccel(sample)
+            self?.sampleBox.update { $0.accelG = SIMD3(sample.x, sample.y, sample.z) }
         }
         motion.onGyro { [weak self] sample in
             self?.session?.handleGyro(sample)
+            self?.sampleBox.update { $0.gyroRadS = SIMD3(sample.x, sample.y, sample.z) }
         }
         motion.onDeviceMotion { [weak self] sample in
             self?.session?.handleDeviceMotion(sample)
+            self?.sampleBox.update { $0.motion = sample }
         }
         motion.onAltimeter { [weak self] sample in
             self?.session?.handleAltimeter(sample)
+            self?.sampleBox.update { $0.altimeter = sample }
         }
         location.onLocation { [weak self] sample in
             self?.session?.handleLocation(sample)
+            self?.sampleBox.update { $0.location = sample }
         }
         battery.onSample { [weak self] sample in
             self?.session?.handleBattery(sample)
-            DispatchQueue.main.async {
-                self?.applyBattery(sample)
-            }
+            self?.sampleBox.update { $0.battery = sample }
         }
         thermalMonitor.onChange { [weak self] state in
             self?.session?.handleThermal(state)
-            DispatchQueue.main.async {
-                self?.thermal = state.wireName
-            }
+            self?.sampleBox.update { $0.thermal = state }
         }
 
         // Probe は callback を購読するだけ。ARKit と IMU の start はここが一度だけ行う。
@@ -111,7 +122,8 @@ final class AppController: ObservableObject {
             enterForeground()
         }
 
-        statusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        tickStatus()
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tickStatus() }
         }
     }
@@ -126,7 +138,8 @@ final class AppController: ObservableObject {
             motion: motion,
             location: location,
             battery: battery,
-            thermal: thermalMonitor.current
+            thermal: thermalMonitor.current,
+            monitorOn: monitorOn
         )
         session.onServerState = { [weak self] state, port in
             DispatchQueue.main.async {
@@ -141,11 +154,11 @@ final class AppController: ObservableObject {
         }
         session.onOriginEpoch = { [weak self] epoch in
             DispatchQueue.main.async {
-                self?.originEpoch = Int(epoch)
+                self?.snapshot.originEpoch = epoch
             }
         }
         self.session = session
-        originEpoch = 0
+        snapshot.originEpoch = 0
         session.start()
     }
 
@@ -163,7 +176,7 @@ final class AppController: ObservableObject {
         if let session {
             session.resetOrigin()
         } else {
-            originEpoch += 1
+            snapshot.originEpoch += 1
             arkit.resetOrigin()
         }
     }
@@ -181,27 +194,28 @@ final class AppController: ObservableObject {
         return true
     }
 
+    func setMonitorOn(_ on: Bool) {
+        monitorOn = on
+        monitorStore.save(on)
+        session?.setMonitorOn(on)
+    }
+
     /// 画面タップ用。ON のあいだだけ ARFrame レートでヒートマップを作る。
     func togglePreview() {
         previewVisible.toggle()
         previewEnabled = previewVisible
         if !previewVisible {
             depthPreview = nil
-            position = nil
-            orientation = nil
+        } else if demoPreview {
+            depthPreview = DepthPreview.demoGradient()
         }
     }
 
     private func handleFrame(_ sample: ARFrameSample) {
         let label = ARKitCapture.trackingLabel(sample.trackingState)
         var preview: UIImage?
-        var position: SIMD3<Float>?
-        var orientation: simd_quatf?
         if previewEnabled {
             preview = sample.depthMap.flatMap { DepthPreview.image(of: $0) }
-            let t = sample.cameraTransform.columns.3
-            position = SIMD3(t.x, t.y, t.z)
-            orientation = simd_quatf(sample.cameraTransform).normalized
         }
         var updatedCenter = false
         var newCenter: Float?
@@ -214,54 +228,89 @@ final class AppController: ObservableObject {
                 )
             }
         }
-        statsLock.lock()
-        lastTracking = label
-        framesInWindow += 1
-        if updatedCenter {
-            lastDepthCenter = newCenter
+        sampleBox.update { latest in
+            latest.tracking = label
+            latest.cameraTransform = sample.cameraTransform
+            if updatedCenter {
+                latest.depthCenterM = newCenter
+            }
         }
-        let depthCenter = lastDepthCenter
-        statsLock.unlock()
-
         if previewEnabled {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.previewVisible else { return }
-                self.tracking = label
                 self.depthPreview = preview
-                self.position = position
-                self.orientation = orientation
-                self.depthCenterM = depthCenter
             }
         }
     }
 
     private func tickStatus() {
-        statsLock.lock()
-        let n = framesInWindow
-        framesInWindow = 0
-        let label = lastTracking
-        let depth = lastDepthCenter
-        statsLock.unlock()
-        deliveredFps = Double(n)
-        tracking = label
-        depthCenterM = depth
         linkAddresses = LinkAddresses.current()
+        if demoValues {
+            snapshot = .demo
+            deviceName = Self.demoDeviceName
+            linkAddresses = Self.demoAddresses
+            if serverPort == nil {
+                serverState = "ready"
+                serverPort = 8765
+            }
+            clients = session?.clientCount() ?? clients
+            if clients == 0 {
+                clients = 1
+            }
+            return
+        }
+        let latest = sampleBox.copy()
+        var ratesHz: [String: Double] = [:]
+        var drops: [String: Int] = [:]
+        var imuReference = ImuReferenceFrame.arbitrary
+        var clock = ClockCheckStatus.pending
+        var origin = snapshot.originEpoch
         if let session {
-            originEpoch = Int(session.originEpoch)
-            let rates = session.effectiveRates()
-            poseHz = rates["odom"] ?? 0
-            colorHz = rates["color_image"] ?? 0
-            depthHz = rates["depth_image"] ?? 0
-            imuHz = rates["imu"] ?? rates["imu_raw"] ?? 0
-            clients = session.clientCount()
+            let panel = session.panelStats()
+            ratesHz = panel.ratesHz
+            drops = panel.drops
+            clients = panel.clients
+            imuReference = panel.imuReference
+            clock = panel.clock
+            origin = panel.originEpoch
         }
-    }
-
-    private func applyBattery(_ sample: BatterySample) {
-        if sample.level >= 0 {
-            batteryText = String(format: "%.0f%%  %@", sample.level * 100, sample.state.wireName)
-        } else {
-            batteryText = "—"
-        }
+        let motionSample = latest.motion
+        snapshot = SensorSnapshot.make(
+            SensorSnapshot.Input(
+                tracking: latest.tracking,
+                originEpoch: origin,
+                cameraTransform: latest.cameraTransform.map { StreamingMap.poseMatrix($0) },
+                accelG: latest.accelG,
+                userAccelG: motionSample.map { SIMD3($0.userAccelerationX, $0.userAccelerationY, $0.userAccelerationZ) },
+                gravityG: motionSample.map { SIMD3($0.gravityX, $0.gravityY, $0.gravityZ) },
+                rotationRateRadS: motionSample.map { SIMD3($0.rotationRateX, $0.rotationRateY, $0.rotationRateZ) }
+                    ?? latest.gyroRadS,
+                attitudeDeviceToReference: motionSample.map {
+                    StreamingMap.attitudeDeviceToReference(
+                        x: $0.attitudeX,
+                        y: $0.attitudeY,
+                        z: $0.attitudeZ,
+                        w: $0.attitudeW
+                    )
+                },
+                imuReference: imuReference,
+                magneticFieldUT: motionSample.map { SIMD3($0.magneticFieldX, $0.magneticFieldY, $0.magneticFieldZ) },
+                magCalibration: motionSample.map { MagCalibration.fromAccuracyRaw($0.magneticFieldAccuracy) } ?? .unknown,
+                pressureKPa: latest.altimeter?.pressure,
+                relativeAltitudeM: latest.altimeter?.relativeAltitude,
+                gnssLatitude: latest.location?.latitude,
+                gnssLongitude: latest.location?.longitude,
+                gnssHorizontalAccuracyM: latest.location?.horizontalAccuracy,
+                gnssAltitudeM: latest.location.flatMap { $0.verticalAccuracy >= 0 ? $0.ellipsoidalAltitude : nil },
+                locationAuthorization: StreamingMap.locationAuthorization(location.authorizationStatus),
+                batteryLevel: latest.battery?.level ?? -1,
+                batteryState: latest.battery?.state.wireName ?? "unknown",
+                thermal: latest.thermal.wireName,
+                clock: clock,
+                ratesHz: ratesHz,
+                drops: drops,
+                depthCenterM: latest.depthCenterM
+            )
+        )
     }
 }
