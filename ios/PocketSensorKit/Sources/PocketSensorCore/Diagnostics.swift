@@ -41,6 +41,8 @@ public struct DiagnosticsInput: Equatable, Sendable {
     public var clock: ClockCheckStatus
     public var magCalibration: MagCalibration
     public var locationAuthorization: LocationAuthorization
+    /// ホールド後に実際に動いているセンサー群。sim はすべて on。
+    public var sensors: SensorNeeds
 
     public init(
         deviceName: String,
@@ -53,7 +55,8 @@ public struct DiagnosticsInput: Equatable, Sendable {
         encodeSkips: [String: Int] = [:],
         clock: ClockCheckStatus,
         magCalibration: MagCalibration,
-        locationAuthorization: LocationAuthorization
+        locationAuthorization: LocationAuthorization,
+        sensors: SensorNeeds = .allOn
     ) {
         self.deviceName = deviceName
         self.trackingState = trackingState
@@ -66,6 +69,7 @@ public struct DiagnosticsInput: Equatable, Sendable {
         self.clock = clock
         self.magCalibration = magCalibration
         self.locationAuthorization = locationAuthorization
+        self.sensors = sensors
     }
 }
 
@@ -80,11 +84,24 @@ public enum Diagnostics {
                 clockStatus(input),
                 magStatus(input),
                 gnssStatus(input),
+                sensorsStatus(input),
             ]
         )
     }
 
     private static func trackingStatus(_ input: DiagnosticsInput) -> DiagnosticMsgs.DiagnosticStatus {
+        if !input.sensors.arkit {
+            return status(
+                level: DiagnosticMsgs.DiagnosticStatus.ok,
+                name: "pocketsensor/tracking",
+                message: "stopped",
+                hardwareId: input.deviceName,
+                values: [
+                    ("state", String(TrackingState.notAvailable.rawValue)),
+                    ("reason", String(TrackingReason.none.rawValue)),
+                ]
+            )
+        }
         let level: UInt8
         let message: String
         switch input.trackingState {
@@ -193,7 +210,7 @@ public enum Diagnostics {
         case .authorized:
             level = DiagnosticMsgs.DiagnosticStatus.ok
         case .notDetermined, .unknown:
-            // 許可のダイアログは、GNSS が最初に購読された時点で端末の画面に出る。答えるまで測位は届かない。
+            // 許可のダイアログは、GNSS の最初の購読か画面の GNSS 表示 ON で出る。答えるまで測位は届かない。
             level = DiagnosticMsgs.DiagnosticStatus.warn
         case .denied, .restricted:
             level = DiagnosticMsgs.DiagnosticStatus.error
@@ -204,6 +221,25 @@ public enum Diagnostics {
             message: input.locationAuthorization.rawValue,
             hardwareId: input.deviceName,
             values: [("authorization", input.locationAuthorization.rawValue)]
+        )
+    }
+
+    private static func sensorsStatus(_ input: DiagnosticsInput) -> DiagnosticMsgs.DiagnosticStatus {
+        let sensors = input.sensors
+        func token(_ on: Bool) -> String { on ? "on" : "off" }
+        return status(
+            level: DiagnosticMsgs.DiagnosticStatus.ok,
+            name: "pocketsensor/sensors",
+            message: sensors.runningMessage,
+            hardwareId: input.deviceName,
+            values: [
+                ("arkit", token(sensors.arkit)),
+                ("depth", token(sensors.depth)),
+                ("motion", token(sensors.motion)),
+                ("altimeter", token(sensors.altimeter)),
+                ("battery", token(sensors.battery)),
+                ("gnss", token(sensors.gnss)),
+            ]
         )
     }
 

@@ -148,6 +148,13 @@ public final class FoxgloveServer: @unchecked Sendable {
         return hit
     }
 
+    public func subscribedKeys() -> Set<String> {
+        subscriberSnapshotLock.lock()
+        let keys = subscriberKeysSnapshot
+        subscriberSnapshotLock.unlock()
+        return keys
+    }
+
     public func stats() -> ServerStats {
         onQueue { self.statsOnQueue() }
     }

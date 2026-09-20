@@ -532,7 +532,8 @@ final class SimulatedDevice: @unchecked Sendable {
                     encodeSkips: ["color": encodeSkipSnapshot()],
                     clock: .ok,
                     magCalibration: .high,
-                    locationAuthorization: .authorized
+                    locationAuthorization: .authorized,
+                    sensors: .allOn
                 )
             )
             server.publish("diagnostics", stampNs: stampNs, payload: encodeCDR(diag))
