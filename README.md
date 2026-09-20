@@ -4,11 +4,16 @@ iPhone をロボットや PC のセンサーとして使うための、iOS ア�
 LiDAR の深度、カメラ、自己位置、IMU、GNSS を、WiFi か USB で配信する。
 データは ROS 2 標準のメッセージ型で流れるので、Lichtblick、rosbag2、ROS 2 のノードがそのまま使える。
 
-## Quick Start
+## Requirements
 
-### 1. アプリを入れる
+- LiDAR 付きの iPhone（iOS 17 以降）
+- Xcode と [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+- Python 3.10 以降と [uv](https://docs.astral.sh/uv/)
+- [mise](https://mise.jdx.dev/) と Docker（Lichtblick の起動と ROS 2 での確認に使う）
 
-LiDAR 付きの iPhone（iOS 17 以降）、Xcode、[XcodeGen](https://github.com/yonaskolb/XcodeGen) が要る。
+## Installation
+
+### iOS app
 
 ```
 cd ios/PocketSensor
@@ -17,22 +22,28 @@ xcodegen generate && open PocketSensor.xcodeproj
 ```
 
 Xcode で実機を選んで Run する。
-アプリが前面にいるあいだ、`ws://<iPhone の名前>.local:8765` で待ち受ける。
 
-### 2. 見る
-
-```
-mise run view:lichtblick
-```
-
-出てきた URL を開くと、3D、RGB、深度が並ぶ（Docker が要る）。
-手元の Lichtblick や Foxglove では、接続の種類に Foxglove WebSocket を選んで同じアドレスを開く。
-
-### 3. Python で受け取る
+### Python SDK
 
 ```
 uv add --editable <このリポジトリ>/python --extra discovery
 ```
+
+## Usage
+
+アプリは、前面にいるあいだ `ws://<iPhone の名前>.local:8765` で待ち受ける。
+SDK とコマンドでは、USB でつないだ端末を `usb:` で開ける。
+
+### Visualization
+
+```
+SOURCE=ws://<iPhone の名前>.local:8765 mise run view:lichtblick
+```
+
+出てきた URL を開くと、3D、RGB、深度が並ぶ。
+手元の Lichtblick や Foxglove では、接続の種類に Foxglove WebSocket を選んで同じアドレスを開く。
+
+### Python
 
 ```python
 import pocketsensor as ps
@@ -45,7 +56,29 @@ with ps.open("ws://iphone.local:8765", config) as dev:   # "usb:" も "run.mcap"
     imu = dev.imu.read_all()           # 前回からの全サンプル
 ```
 
-## 配信するデータ
+### CLI
+
+```
+pocketsensor discover                          # 端末を探す
+pocketsensor info   ws://iphone.local:8765     # 端末の情報、較正、時計合わせ
+pocketsensor record ws://iphone.local:8765 -o run.mcap
+pocketsensor echo   run.mcap /pocketsensor/odom
+pocketsensor check-axes   usb:                 # 取り付けたあとに、軸の向きを確かめる
+pocketsensor check-anchor usb:                 # 参照画像の anchor を確かめる
+```
+
+記録した MCAP は、`ros2 bag play` と Lichtblick でも開ける。
+OpenCV と Rerun で表示する例は [examples/](examples/README.md) にある。
+
+### ROS 2
+
+```
+ros2 launch pocketsensor_ros relay.launch.py source:=ws://iphone.local:8765
+```
+
+ビルドとパラメータは [ros2/pocketsensor_ros/](ros2/pocketsensor_ros/README.md) にある。
+
+## Topics
 
 | データ | トピック | 形式 | 既定のレート |
 | --- | --- | --- | --- |
@@ -64,29 +97,7 @@ with ps.open("ws://iphone.local:8765", config) as dev:   # "usb:" も "run.mcap"
 - センサーは、購読されているあいだだけ動く
 - `<name>` は端末の名前で、既定は `pocketsensor`
 
-## コマンド
-
-```
-pocketsensor discover                          # 端末を探す
-pocketsensor info   ws://iphone.local:8765     # 端末の情報、較正、時計合わせ
-pocketsensor record ws://iphone.local:8765 -o run.mcap
-pocketsensor echo   run.mcap /pocketsensor/odom
-pocketsensor check-axes   usb:                 # 取り付けたあとに、軸の向きを確かめる
-pocketsensor check-anchor usb:                 # 参照画像の anchor を確かめる
-```
-
-記録した MCAP は、`ros2 bag play` と Lichtblick でも開ける。
-OpenCV と Rerun で表示する例は [examples/](examples/README.md) にある。
-
-## ROS 2
-
-```
-ros2 launch pocketsensor_ros relay.launch.py source:=ws://iphone.local:8765
-```
-
-ビルドとパラメータは [ros2/pocketsensor_ros/](ros2/pocketsensor_ros/README.md) にある。
-
-## 開発
+## Development
 
 ```
 mise run test        # Python、Swift、E2E
@@ -98,9 +109,9 @@ mise run sim         # iPhone 無しで試すための擬似デバイス
 メッセージの型とチャンネルの正本は `contract/` にある。
 Swift と Python のコードは、そこから生成する。
 
-## 文書
+## Documentation
 
-| 読みたいこと | 文書 |
+| 内容 | 文書 |
 | --- | --- |
 | 何を作るか、なぜその形か | [docs/architecture.md](docs/architecture.md) |
 | 接続、チャンネル、設定、サービス | [docs/protocol.md](docs/protocol.md) |
