@@ -1,6 +1,6 @@
 # pocketsensor
 
-iPhone を、ロボットへ貼り付けて使えるセンサーにする iOS アプリと、その Python SDK。
+iPhone をロボットや PC のセンサーとして使うための、iOS アプリと Python SDK。
 LiDAR の深度、カメラ、自己位置、IMU、GNSS を、WiFi か USB で配信する。
 データは ROS 2 標準のメッセージ型で流れるので、Lichtblick、rosbag2、ROS 2 のノードがそのまま使える。
 
