@@ -1,6 +1,6 @@
 # contract
 
-pocketsensor が wire に載せるものの定義を、機械が読める形で置く。
+pocketsensor が配信するメッセージの定義を、機械可読な形で置く。
 意図の説明は [docs/protocol.md](../docs/protocol.md) にある。
 説明と定義が食い違ったときは、このディレクトリの定義を正とする。
 

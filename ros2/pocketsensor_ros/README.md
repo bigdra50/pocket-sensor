@@ -1,7 +1,7 @@
 # pocketsensor_ros
 
 iPhone の配信を ROS 2 のトピックへ流す中継ノードである。
-Python SDK が受け取った CDR のバイト列を、復号せずにそのまま publish する。
+Python SDK が受け取った CDR のバイト列を、デコードせずにそのまま publish する。
 ROS 2 Jazzy で確かめてある。
 
 ## ビルド
@@ -28,10 +28,10 @@ USB でつなぐときは `source:=usb:` を渡す。
 | パラメータ | 型 | 既定 | 意味 |
 | --- | --- | --- | --- |
 | `source` | 文字列 | `ws://iphone.local:8765` | 接続先。`ws://<host>:<port>` か `usb:` |
-| `rewrite_stamp` | 真偽値 | true | `header.stamp` を、このマシンの壁時計へ書き換える |
-| `streams` | 文字列の配列 | 空 | 流すストリーム。空なら、端末が広告したチャンネルをすべて流す |
+| `rewrite_stamp` | 真偽値 | true | `header.stamp` を、このマシンのシステム時刻へ書き換える |
+| `streams` | 文字列の配列 | 空 | 流すストリーム。空なら、端末がアドバタイズしたチャンネルをすべて流す |
 | `publish_tf` | 真偽値 | true | false なら、端末の姿勢の `/tf` と `/tf_static` を出さない。参照画像の anchor は出す（下の URDF の節を参照） |
-| `reconnect_period` | 実数（秒） | 2.0 | つながらないときと切れたときに、接続し直す間隔 |
+| `reconnect_period` | 実数（秒） | 2.0 | つながらないときと切れたときに、再接続する間隔 |
 | `depth_transport` | 文字列 | `compressed` | 深度と confidence をどの形で受け取るか。`compressed`（PNG）、`raw`（無圧縮）、`both` |
 
 `streams` には `color`、`depth`、`pose`、`imu`、`imu_raw`、`mag`、`pressure`、`gnss`、`battery` を書ける。
@@ -49,15 +49,15 @@ ros2 run image_transport republish compressedDepth raw --ros-args \
 
 ### 時刻
 
-端末が付ける `header.stamp` は、端末の時計の値である。
-`rewrite_stamp` が true のとき、中継は時計合わせ（`clock_sync`）の結果で、この値をマシンの壁時計へ写してから publish する。
-時計合わせが済むまでに届いたメッセージは捨てる。
-端末の時計の値のままでは、tf2 と `message_filters` が、ほかのノードのメッセージと組にできない。
+端末が付ける `header.stamp` は、端末のクロックの値である。
+`rewrite_stamp` が true のとき、中継は時刻同期（`clock_sync`）の結果で、この値をマシンのシステム時刻へ換算してから publish する。
+時刻同期が済むまでに届いたメッセージは破棄する。
+端末のクロックの値のままでは、tf2 と `message_filters` が、ほかのノードのメッセージと組にできない。
 
-### 接続し直し
+### 再接続
 
-端末のアプリは、前面にいるあいだだけ待ち受ける。
-中継は `reconnect_period` ごとに接続し直し、セッションごとに時計合わせをやり直す。
+端末のアプリは、フォアグラウンドにあるあいだだけ待ち受ける。
+中継は `reconnect_period` ごとに再接続し、セッションごとに時刻同期をやり直す。
 端末より先に中継を起動してもよい。
 
 ### QoS

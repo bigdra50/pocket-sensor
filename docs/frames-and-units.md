@@ -1,9 +1,9 @@
 # 座標系と単位
 
-wire に載せる値は、ROS 2 の約束（REP-103、REP-105、REP-145）と SI 単位に揃える。
+配信する値は、ROS 2 の規約（REP-103、REP-105、REP-145）と SI 単位に従う。
 Apple の API が返す値との変換は、iPhone のアプリが受け持つ。
 
-## 共通の約束
+## 共通の規約
 
 - 座標系はすべて右手系
 - 端末に固定した frame は、x が前、y が左、z が上
@@ -31,7 +31,7 @@ frame 名の前には、端末の名前 `<name>` を付ける。
 
 RGB、深度、confidence の画素は、端末の持ち方にも画面の向きにも依らず、センサーの並びのまま送る。
 この並びは、カメラ群を上にした横置きで正立する。
-縦置きで使うと、表示ツールの画像は 90° 回って見える。
+縦置きで使うと、可視化ツールの画像は 90° 回って見える。
 `camera_info` と `<name>_color_optical_frame` は、この画素の並びに対して決まっている。
 JPEG へ EXIF の向きは入れない。
 
@@ -45,10 +45,10 @@ Lichtblick と Foxglove では Image パネルの設定の Rotation、ROS 2 で�
 | 親 | 子 | 回転（roll, pitch, yaw） | 並進 |
 | --- | --- | --- | --- |
 | `<name>_link` | `<name>_color_optical_frame` | (-π/2, 0, -π/2) | 0 |
-| `<name>_link` | `<name>_imu_link` | (0, -π/2, 0) | 0（未較正） |
+| `<name>_link` | `<name>_imu_link` | (0, -π/2, 0) | 0（未測定） |
 
 光学 frame への回転は、RealSense と Orbbec の ROS 2 ラッパーが使う値と同じである。
-カメラと IMU のあいだの並進は測っていないので 0 とし、`device_info` に未較正と記す。
+カメラと IMU のあいだの並進は測っていないので 0 とし、`device_info` の `calibrated` を false にする。
 
 ## ARKit の姿勢の変換
 
@@ -74,7 +74,7 @@ world の向きは `.gravity` で決めるので、yaw は北を基準にしな�
 
 ## 画像と内部パラメータ
 
-- 画素の座標は、左上の画素の中心を原点とする。ARKit の内部パラメータと OpenCV が、同じ約束を使っている
+- 画素の座標は、左上の画素の中心を原点とする。ARKit の内部パラメータと OpenCV も、同じ規約である
 - `camera_info` の `k` と `p` は、送る画像の解像度に合わせた値を入れ、`width` と `height` も書き換える。`binning` と `roi` は使わない
 - ARKit はレンズの歪みの係数を出さない。`distortion_model` は `plumb_bob`、`d` は 0 を 5 つ入れる
 - `camera_info` は、画像と同じ時刻で毎フレーム送る
@@ -89,11 +89,11 @@ world の向きは `.gravity` で決めるので、yaw は北を基準にしな�
     fy' = fy * sy                   cy' = (cy + 0.5) * sy - 0.5
 ```
 
-主点へ 0.5 を加えてから倍率を掛けるのは、画素の中心を原点とする約束のためである。
+主点へ 0.5 を加えてから倍率を掛けるのは、画素の中心を原点とする規約のためである。
 
 ## 単位の変換
 
-| 量 | Apple の値 | wire の値 | 変換 |
+| 量 | Apple の値 | 配信する値 | 変換 |
 | --- | --- | --- | --- |
 | 加速度 | G。静止して画面が上なら z は -1 | m/s² の比力。静止して z が上なら +g | -9.80665 を掛ける |
 | 角速度 | rad/s | rad/s | しない |
@@ -116,8 +116,8 @@ world の向きは `.gravity` で決めるので、yaw は北を基準にしな�
 
 ### 地磁気
 
-`imu/mag` には、`CMDeviceMotion` の較正済みの値を入れる。
-較正の度合い（未較正、低、中、高）は `/diagnostics` で知らせ、未較正のあいだは `imu/mag` を流さない。
+`imu/mag` には、`CMDeviceMotion` のキャリブレーション済みの値を入れる。
+キャリブレーションの精度（未完了、低、中、高）は `/diagnostics` で知らせ、未完了のあいだは `imu/mag` を流さない。
 
 ### GNSS
 
@@ -126,7 +126,7 @@ world の向きは `.gravity` で決めるので、yaw は北を基準にしな�
 - `horizontalAccuracy` が負なら測位は無効で、`status` を `STATUS_NO_FIX` にし、緯度、経度、高度を NaN にする
 - `verticalAccuracy` だけが負なら、高度だけを NaN にする
 - 衛星系の別は API から分からないので、`service` は 0 とする
-- 測位の時刻（壁時計）は `gnss/time_reference` の `time_ref` に入れる。`header.stamp` の扱いは [time.md](time.md) にある
+- 測位の時刻（システム時刻）は `gnss/time_reference` の `time_ref` に入れる。`header.stamp` の扱いは [time.md](time.md) にある
 
 ### 深度
 

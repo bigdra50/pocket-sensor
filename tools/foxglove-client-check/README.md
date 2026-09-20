@@ -1,18 +1,18 @@
 # foxglove-client-check
 
-pocketsensor のサーバーを、表示ツールの側の実装で確かめる検査である。
-接続から復号までを、Lichtblick と Foxglove が内部で使っているパッケージだけで行う。
+pocketsensor のサーバーを、可視化ツール側の実装で確かめる検査である。
+接続からデコードまでを、Lichtblick と Foxglove が内部で使っているパッケージだけで行う。
 
 | 役割 | パッケージ |
 | --- | --- |
 | WebSocket のクライアント | `@foxglove/ws-protocol` |
 | `ros2msg` のスキーマの解析 | `@foxglove/rosmsg` |
-| CDR の復号と符号化 | `@foxglove/rosmsg2-serialization` |
+| CDR のデコードとエンコード | `@foxglove/rosmsg2-serialization` |
 
 ## 確かめること
 
-- `serverInfo` が `cdr` と、`parameters`、`parametersSubscribe`、`services` を広告する
-- 広告された全チャンネルのスキーマが解析でき、届いたメッセージが復号できる
+- `serverInfo` が `cdr` と、`parameters`、`parametersSubscribe`、`services` をアドバタイズする
+- アドバタイズされた全チャンネルのスキーマが解析でき、届いたメッセージがデコードできる
 - `header.stamp` が、メッセージに付いた時刻と一致する
 - `clock_sync` が `t1` をそのまま返し、`t2` が `t3` より後にならない
 - `getParameters` と `setParameters` が動く。変えた `color.rate` は、終わる前に元の値へ戻す

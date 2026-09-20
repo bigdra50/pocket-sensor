@@ -1,20 +1,20 @@
-# 通信の約束
+# プロトコル
 
 iPhone のアプリは、Foxglove WebSocket プロトコル v1 と互換のサーバーとして動く。
-データは ROS 2 の標準メッセージを CDR で符号化して流し、設定は parameters、時計合わせと指示は services で受ける。
+データは ROS 2 の標準メッセージを CDR でエンコードして流し、設定は parameters、時刻同期と指示は services で受ける。
 チャンネルと型の正本は `contract/` にある。
 
 ## 接続
 
-| 項目 | 約束 |
+| 項目 | 内容 |
 | --- | --- |
-| 転送 | TCP の上の WebSocket。ポートの初期値は 8765（foxglove_bridge と同じ） |
-| 向き | iPhone が待ち受け、クライアントが接続する。同時に複数の接続を受ける |
+| トランスポート | TCP 上の WebSocket。ポートの初期値は 8765（foxglove_bridge と同じ） |
+| 接続の向き | iPhone が待ち受け、クライアントが接続する。同時に複数の接続を受ける |
 | サブプロトコル | `foxglove.sdk.v1` と `foxglove.websocket.v1` の両方を受ける。両方の提示なら前者を選ぶ |
-| WiFi と Ethernet | Bonjour のサービス型 `_pocketsensor._tcp` で広告する。IP アドレスを直接指定しても接続できる |
+| WiFi と Ethernet | Bonjour のサービス型 `_pocketsensor._tcp` でアドバタイズする。IP アドレスを直接指定しても接続できる |
 | USB | ホスト側の usbmux が、同じポートへの接続を端末へ転送する |
 
-Bonjour の広告には、ローカルネットワークの許可が要る。
+Bonjour のアドバタイズには、ローカルネットワークの許可が要る。
 許可が無くても、IP アドレスの直接指定と USB では接続できる。
 
 ### 接続の直後に送るもの
@@ -29,11 +29,11 @@ Bonjour の広告には、ローカルネットワークの許可が要る。
 
 ### セッション
 
-セッションは、アプリが前面で配信を続けているひと続きの期間である。
-アプリは背景へ回る時点で待ち受けを閉じ、接続を切る。
-前面へ戻ったら待ち受けを開き直し、新しいセッションを始める。
+セッションは、アプリがフォアグラウンドで配信を続けているひと続きの期間である。
+アプリは、バックグラウンドへ移る時点で待ち受けを閉じ、接続を切る。
+フォアグラウンドへ戻ったら待ち受けを開き直し、新しいセッションを始める。
 
-セッションが変わると、`sessionId` と時刻の基準（[time.md](time.md) の `anchor`）が新しくなり、ARKit の world 原点も作り直される。
+セッションが変わると、`sessionId` と時刻の基準（[time.md](time.md) の `anchor`）が新しくなり、ARKit の world 原点もリセットされる。
 クライアントは、前のセッションのデータと連続していないものとして扱う。
 
 ## チャンネル
@@ -70,7 +70,7 @@ frame の定義は [frames-and-units.md](frames-and-units.md) にある。
 | `/diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` | 使わない | 1 Hz |
 
 同じ ARFrame から作る姿勢、RGB、深度、confidence、`camera_info` には、同じ時刻を付ける。
-クライアントは、時刻の一致でフレームの組を作る。
+クライアントは、時刻の一致でフレームセットを作る。
 
 深度は RGB のカメラへ位置合わせ済みなので、frame_id は RGB と同じにしてある。
 単位はミリメートルで、無効な画素には 0 が入る。
@@ -81,7 +81,7 @@ frame の定義は [frames-and-units.md](frames-and-units.md) にある。
 
 深度と confidence は、無圧縮のチャンネルと、PNG で可逆圧縮したチャンネルの 2 通りで出す。
 中身は同じで、クライアントが購読で選ぶ。
-端末は、購読されたほうだけを符号化する。
+端末は、購読されたほうだけをエンコードする。
 
 | チャンネル | `format` | `data` |
 | --- | --- | --- |
@@ -91,25 +91,25 @@ frame の定義は [frames-and-units.md](frames-and-units.md) にある。
 トピック名、`format` の文字列、12 バイトのヘッダは、ROS の `image_transport` の `compressedDepth` と `compressed` に合わせた。
 ROS 2 の側は、`image_transport` の `republish` で `sensor_msgs/Image` へ戻せる。
 ヘッダは `int32` の 0（`INV_DEPTH`）と `float32` の 0 が 2 つで、どれも little endian である。
-`16UC1` の深度では、復号する側はこのヘッダを読み飛ばすだけでよい。
+`16UC1` の深度では、デコードする側はこのヘッダを読み飛ばすだけでよい。
 
 無圧縮の深度と confidence は、15 Hz で毎秒 2.2 MB になる。
-Python SDK は、端末が広告していれば圧縮のほうを購読する。
-表示ツールで深度を色付きで見たいときは、無圧縮の `depth/image` を購読する。
+Python SDK は、端末がアドバタイズしていれば圧縮のほうを購読する。
+可視化ツールで深度を色付きで見たいときは、無圧縮の `depth/image` を購読する。
 
-### 追跡の状態
+### トラッキングの状態
 
-ARKit の追跡の状態は、姿勢と同じ時刻の `TrackingStatus` で流す。
+ARKit のトラッキングの状態は、姿勢と同じ時刻の `TrackingStatus` で流す。
 
 | フィールド | 型 | 内容 |
 | --- | --- | --- |
 | `header` | `std_msgs/Header` | 姿勢と同じ時刻 |
 | `state` | `uint8` | 0 は利用不可、1 は制限あり、2 は正常 |
 | `reason` | `uint8` | 0 は無し、1 は初期化中、2 は動きが速すぎる、3 は特徴が足りない、4 は再ローカライズ中 |
-| `origin_epoch` | `uint32` | ARKit の world 原点を作り直すたびに増える数 |
+| `origin_epoch` | `uint32` | ARKit の world 原点をリセットするたびに増える数 |
 
 `origin_epoch` が変わったら、クライアントは前の姿勢と連続していないものとして扱う。
-原点を作り直すのは、`reset_origin` が呼ばれたときと、止まっていた ARKit が動き直すときである。
+原点をリセットするのは、`reset_origin` が呼ばれたときと、止まっていた ARKit が再開するときである。
 `state` が 0 のあいだは、`odom` と `/tf` を流さない。
 
 `odom` の `pose.covariance` は 0（不明）である。
@@ -120,7 +120,7 @@ ARKit は速度を出さないので、`twist` は 0 とし、`twist.covariance`
 ARKit の world 原点は、セッションごとに変わる。
 部屋へ貼った画像を基準にすると、クライアントはセッションをまたいで同じ原点を作れる。
 
-アプリへ組み込んだ参照画像を ARKit が追跡しているあいだ、`<name>_odom` から `<name>_anchor_<画像の名前>` への変換を `/tf` へ載せる。
+アプリへ組み込んだ参照画像を ARKit がトラッキングしているあいだ、`<name>_odom` から `<name>_anchor_<画像の名前>` への変換を `/tf` へ載せる。
 参照画像は、Xcode の AR Resource Group `Anchors` へ、印刷したときの実寸と一緒に登録する。
 画像の名前は frame 名の一部になるので、英小文字、数字、下線だけで付ける。
 
@@ -132,7 +132,7 @@ ARKit の world 原点は、セッションごとに変わる。
 | 項目 | 内容 |
 | --- | --- |
 | レート | 画像ごとに 0.5 秒に 1 回を上限にする |
-| 追跡が外れたとき | 流すのをやめる |
+| トラッキングが外れたとき | 流すのをやめる |
 | 時刻 | 検出した ARFrame の時刻。同じフレームの姿勢と同じ値になる |
 | まとめ方 | 姿勢を送る回にだけ、その姿勢の変換と同じ `TFMessage` へ載せる |
 
@@ -155,8 +155,8 @@ ROS 2 の transient local に当たる。
 | `name` | 端末の名前。トピック名と frame 名の前に付く |
 | `model`、`os_version`、`app_version` | 機種の識別子、iOS の版、アプリの版 |
 | `mode` | カメラのモード。`arkit` だけ |
-| `streams` | 広告している全チャンネル。キーはチャンネルの表（`contract/channels.toml`）の key |
-| `clock` | 時計の種類と、壁時計へ固定したときの差。[time.md](time.md) を参照 |
+| `streams` | アドバタイズしている全チャンネル。キーはチャンネルの表（`contract/channels.toml`）の key |
+| `clock` | クロックの種類と、システム時刻との差。[time.md](time.md) を参照 |
 | `frames` | frame 名の一覧と、固定の変換 |
 
 入れ子の中身は次のとおりである。
@@ -164,7 +164,7 @@ ROS 2 の transient local に当たる。
 | キー | 中身 |
 | --- | --- |
 | `streams.<key>` | `topic` と `schema`。画像のチャンネルには `width`、`height`、`encoding`、レートの決まっているチャンネルには `rate`（Hz）が加わる |
-| `clock` | `kind`（時計の種類）、`anchor_ns`、`anchored_at_wall_ns`、`self_check` |
+| `clock` | `kind`（クロックの種類）、`anchor_ns`、`anchored_at_wall_ns`、`self_check` |
 | `frames` | `odom`、`link`、`color_optical`、`imu_link` の frame 名と、固定の変換の配列 `static_transforms` |
 | `frames.static_transforms[]` | `parent`、`child`、`translation`、`rotation_xyzw`、`calibrated` |
 
@@ -181,9 +181,9 @@ IMU への変換がこれに当たる。
 | --- | --- | --- |
 | `pocketsensor/tracking` | 正常は OK、制限ありは WARN、利用不可は ERROR。ARKit を止めているあいだは OK とし、`message` を `stopped` にする | `state`、`reason`（`TrackingStatus` と同じ数値） |
 | `pocketsensor/thermal` | nominal と fair は OK、serious は WARN、critical は ERROR | `level` |
-| `pocketsensor/streams` | 破棄が 1 件でもあれば WARN | `clients`、`rate.<key>`（送った実績の Hz）、`drops.<key>`（背圧で捨てた数）、`encode_skips.<key>`（符号化が間に合わず飛ばした数） |
-| `pocketsensor/clock` | 自己点検が suspicious なら ERROR | `self_check`（[time.md](time.md) を参照） |
-| `pocketsensor/mag` | high と medium は OK、low と unknown は WARN、未較正は ERROR | `calibration` |
+| `pocketsensor/streams` | 破棄が 1 件でもあれば WARN | `clients`、`rate.<key>`（送った実績の Hz）、`drops.<key>`（バックプレッシャーで破棄した数）、`encode_skips.<key>`（エンコードが間に合わず飛ばした数） |
+| `pocketsensor/clock` | セルフチェックが suspicious なら ERROR | `self_check`（[time.md](time.md) を参照） |
+| `pocketsensor/mag` | high と medium は OK、low と unknown は WARN、uncalibrated は ERROR | `calibration` |
 | `pocketsensor/gnss` | authorized は OK、not_determined は WARN、denied と restricted は ERROR | `authorization` |
 | `pocketsensor/sensors` | 常に OK | `arkit`、`depth`、`motion`、`altimeter`、`battery`、`gnss`。値は、そのセンサー群が動いていれば `on`、止まっていれば `off` |
 
@@ -201,10 +201,10 @@ IMU への変換がこれに当たる。
 アプリの画面が表示のためにセンサーを動かしていることもあるが、クライアントの購読には影響しない。
 
 止まっているセンサーのチャンネルを購読すると、最初のメッセージまでに時間がかかる。
-ARKit は、最初のフレームまでに 1 秒ほど、追跡が正常になるまでに 4 秒ほどかかる。
+ARKit は、最初のフレームまでに 1 秒ほど、トラッキングが正常になるまでに 4 秒ほどかかる。
 購読が無くなっても、センサーは 10 秒のあいだ動かし続ける。
 
-ARKit が動き直すと、world の原点は作り直され、`origin_epoch` が増える。
+ARKit が再開すると、world の原点はリセットされ、`origin_epoch` が増える。
 姿勢の連続性が要るクライアントは、`odom` か `/tf` を購読したままにする。
 
 ## parameters
@@ -225,44 +225,44 @@ ARKit が動き直すと、world の原点は作り直され、`origin_epoch` �
 | `device.name` | 文字列 | `pocketsensor` | 読み取り専用。変更はアプリの画面でする |
 
 レートは上限である。
-ARKit は 60 fps のまま動かし、wire に載せる分だけを間引く。
+ARKit は 60 fps のまま動かし、配信するときに間引く。
 
 1. 姿勢、RGB、深度の上限のうち最も高いものを、基準のレートとする。ARFrame の時刻を見て、前に選んだフレームから基準の間隔がたったフレームを選び、通し番号を振る
 2. レートの上限が r のストリームは、N を基準のレート / r の切り上げとして、その通し番号が N で割り切れるフレームだけを送る
 
-レートが違っても、遅い側のフレームは速い側のフレームに含まれるので、同じフレームの組が揃う。
-端末の熱の状態が serious なら基準のレートを半分、critical なら 6 分の 1 へ下げ、実際のレートを `/diagnostics` で知らせる。
+レートが違っても、遅い側のフレームは速い側のフレームに含まれるので、同じフレームのデータが揃う。
+端末の thermal state が serious なら基準のレートを半分、critical なら 6 分の 1 へ下げ、実際のレートを `/diagnostics` で知らせる。
 
 ## services
 
 | 名前 | 型 | 内容 |
 | --- | --- | --- |
-| `/<name>/clock_sync` | `pocketsensor_msgs/srv/ClockSync` | 時計合わせの 1 往復。[time.md](time.md) を参照 |
-| `/<name>/reset_origin` | `std_srvs/srv/Trigger` | ARKit の world 原点を作り直し、`origin_epoch` を 1 増やす |
+| `/<name>/clock_sync` | `pocketsensor_msgs/srv/ClockSync` | 時刻同期の 1 往復。[time.md](time.md) を参照 |
+| `/<name>/reset_origin` | `std_srvs/srv/Trigger` | ARKit の world 原点をリセットし、`origin_epoch` を 1 増やす |
 
-`ClockSync` の要求は `uint64 t1`（クライアントの時計、ナノ秒）の 1 項目である。
+`ClockSync` の要求は `uint64 t1`（クライアントのクロック、ナノ秒）の 1 項目である。
 応答は `uint64 t1`（要求の値をそのまま返す）、`uint64 t2`（受信の時刻）、`uint64 t3`（返信の時刻）の 3 項目である。
-`t2` と `t3` は、チャンネルの時刻と同じ時計で測る。
+`t2` と `t3` は、チャンネルの時刻と同じクロックで測る。
 
-`std_srvs/srv/Trigger` の要求のようにフィールドの無いメッセージは、ROS 2 の符号化に合わせて、値が 0 の 1 バイトを本体とする。
+`std_srvs/srv/Trigger` の要求のようにフィールドの無いメッセージは、ROS 2 のエンコードに合わせて、値が 0 の 1 バイトを本体とする。
 iPhone のアプリは、この 1 バイトが無い要求も受け付ける。
 
-## 背圧
+## バックプレッシャー
 
-接続ごとに、チャンネルの種類に応じた送信待ちの持ち方をする。
+送信が追いつかないときの扱いは、チャンネルの種類ごとに決めてあり、接続ごとに適用する。
 
-| チャンネル | 送信待ちの持ち方 |
+| チャンネル | キューの扱い |
 | --- | --- |
 | 姿勢、`tracking`、`/tf`、RGB、深度、confidence、`camera_info` | 最新の 1 件だけを持つ。送信中に次が来たら置き換える |
-| IMU、地磁気 | 1 秒分までのキュー。あふれたら古いものから捨てる |
-| そのほか | 捨てない |
+| IMU、地磁気 | 1 秒分までのキュー。あふれたら古いものから破棄する |
+| そのほか | 破棄しない |
 
 同じ ARFrame から作ったメッセージは、まとめて置き換える。
 RGB の JPEG 化のように時間のかかるメッセージは、同じ時刻を付けたまま、あとから同じまとまりへ加わる。
-符号化が次のフレームに間に合わなければ、その回の RGB だけを飛ばす。
-捨てた件数と飛ばした回数は、チャンネルごとに `/diagnostics` で知らせる。
+エンコードが次のフレームに間に合わなければ、その回の RGB だけを飛ばす。
+破棄した件数と飛ばした回数は、チャンネルごとに `/diagnostics` で知らせる。
 
-## 記録との対応
+## MCAP への記録
 
 クライアントは、受信したメッセージをそのまま MCAP へ書ける。
 
@@ -270,6 +270,6 @@ RGB の JPEG 化のように時間のかかるメッセージは、同じ時刻�
 | --- | --- |
 | Schema と Channel | `advertise` で受けた `schemaName`、`schema`、`topic`、`encoding` |
 | Message の `log_time` と `publish_time` | Message Data の時刻（計測時刻） |
-| Metadata | `device_info` の JSON と、時計合わせのサンプル |
+| Metadata | `device_info` の JSON と、時刻同期のサンプル |
 
-この形の MCAP は `cdr` と `ros2msg` の組なので、Lichtblick でも rosbag2 でも開ける。
+この形の MCAP は `cdr` と `ros2msg` の組み合わせなので、Lichtblick でも rosbag2 でも開ける。

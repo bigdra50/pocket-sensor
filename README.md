@@ -33,7 +33,7 @@ uv add --editable <このリポジトリ>/python --extra discovery
 
 ## Usage
 
-アプリは、前面にいるあいだ `ws://<iPhone の名前>.local:8765` で待ち受ける。
+アプリは、フォアグラウンドにあるあいだ `ws://<iPhone の名前>.local:8765` で待ち受ける。
 SDK とコマンドでは、USB でつないだ端末を `usb:` で開ける。
 
 ### Visualization
@@ -62,7 +62,7 @@ with ps.open("ws://iphone.local:8765", config) as dev:   # "usb:" も "run.mcap"
 
 ```
 pocketsensor discover                          # 端末を探す
-pocketsensor info   ws://iphone.local:8765     # 端末の情報、較正、時計合わせ
+pocketsensor info   ws://iphone.local:8765     # 端末の情報、キャリブレーション、時刻同期
 pocketsensor record ws://iphone.local:8765 -o run.mcap
 pocketsensor echo   run.mcap /pocketsensor/odom
 pocketsensor check-axes   usb:                 # 取り付けたあとに、軸の向きを確かめる
@@ -117,7 +117,7 @@ Swift と Python のコードは、そこから生成する。
 | --- | --- |
 | 接続、チャンネル、設定、サービス | [docs/protocol.md](docs/protocol.md) |
 | 座標系と単位 | [docs/frames-and-units.md](docs/frames-and-units.md) |
-| 時刻と時計合わせ | [docs/time.md](docs/time.md) |
+| タイムスタンプと時刻同期 | [docs/time.md](docs/time.md) |
 | SDK の API | [docs/sdk-api.md](docs/sdk-api.md) |
 
 ## License

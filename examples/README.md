@@ -13,7 +13,7 @@ uv run --project python --with opencv-python python examples/view_opencv.py ws:/
 
 ## log_rerun.py
 
-姿勢、RGB、深度から起こした点を Rerun へ流す。
+姿勢、RGB、深度から求めた点群を Rerun へ流す。
 
 ```
 uv run --project python --with rerun-sdk python examples/log_rerun.py usb:
