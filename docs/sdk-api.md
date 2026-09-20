@@ -1,11 +1,7 @@
 # Python SDK の API
 
-Python SDK は、iPhone を ZED や RealSense と同じ作法で開けるようにする。
-最初の実装は Python で、ROS 2 には依存しない。
-この文書は、API の形と、その形にした理由を定める。
-
-実装が始まったら、API の正本は型と docstring へ移る。
-この文書は、設計の意図を説明する役割を持つ。
+Python SDK は、iPhone を RGB-D カメラの SDK と同じ作法で開く。
+ROS 2 には依存しない。
 
 ## 全体の形
 
@@ -49,16 +45,9 @@ with ps.open("ws://iphone.local:8765", config) as dev:   # "usb:" も "run.mcap"
 | ファイルのパス | `run.mcap` | 記録を再生する |
 
 実機、USB、記録ファイルのどれを開いても、返る `Device` の API は同じである。
-ZED の `InitParameters.input`、Ouster の `open_source`、Orbbec の `PlaybackDevice` が同じ形を採っている。
-Azure Kinect は再生を別系統の API にしており、ライブ用と再生用でコードが二重になる。
-
 記録ファイルで意味を持たない操作（レートの変更、原点の作り直し）は、例外を返す。
-ZED が、SVO の再生でカメラの設定を変える操作を受け付けないのと同じ扱いである。
 
 ## 設定
-
-開くときに決める設定と、開いたあとで変えられる設定を分ける。
-ZED が `InitParameters` と `RuntimeParameters` を分けているのと同じ考え方である。
 
 | 種類 | 渡し方 | 項目 |
 | --- | --- | --- |
@@ -66,8 +55,7 @@ ZED が `InitParameters` と `RuntimeParameters` を分けているのと同じ�
 | 開いたあとで変えられる | `dev.set_rate(stream, hz)` など | 各ストリームのレート、JPEG の品質、画像の幅 |
 
 `Config.streams` に挙げたストリームだけを購読する。
-端末は、購読されていない RGB と深度を符号化せず、GNSS も取得しない。
-使わないストリームを挙げないことが、発熱を抑える手段になる。
+端末は購読されていないセンサーを止めるので、使わないストリームを挙げなければ発熱が減る。
 
 開いたあとの変更は、端末の parameters を書き換える。
 設定は端末に 1 つなので、ほかの接続にも反映される。
@@ -75,8 +63,6 @@ ZED が `InitParameters` と `RuntimeParameters` を分けているのと同じ�
 ## フレームの組
 
 `dev.wait_for_frames(timeout)` は、同じ ARFrame から作られたデータの組（`FrameSet`）を返す。
-端末は同じフレームのデータへ同じ時刻を付けるので、組は時刻の一致で作る。
-RealSense の `frameset` や Azure Kinect の `k4a_capture_t` に当たる。
 
 | `FrameSet` の項目 | 内容 |
 | --- | --- |
@@ -90,10 +76,8 @@ RealSense の `frameset` や Azure Kinect の `k4a_capture_t` に当たる。
 
 深度と confidence は、端末が広告していれば、PNG で可逆圧縮したチャンネルから受け取る。
 `ps.Depth(compressed=False)` を渡すと、無圧縮のチャンネルを使う。
-どちらを使っても、`frames.depth` と `frames.confidence` の中身は同じである。
 
 組が欠けたときの扱いは `FramePolicy` で選ぶ。
-Orbbec の `OBFrameAggregateOutputMode` に倣った。
 
 | 値 | 内容 |
 | --- | --- |
@@ -101,24 +85,16 @@ Orbbec の `OBFrameAggregateOutputMode` に倣った。
 | `ANY` | 欠けていても返す。欠けた項目は `None` になる |
 
 `wait_for_frames` を呼んでいないあいだに届いた組は、最新の 1 つを残して捨てる。
-遅延を小さく保つための扱いで、ZED と RealSense も同じである。
 捨てた数は `dev.stats` で読める。
 
 ## 高いレートのセンサー
 
 IMU のように画像より速いセンサーは、フレームの組へ入れない。
 `dev.imu.read_all()` が、前回の呼び出し以降に届いた全サンプルを返す。
-画像のループを 1 本回すだけで、IMU を取りこぼさずに読める。
-
-ZED は当初、全サンプルを得るために 800 Hz でポーリングする別スレッドを利用者へ求めていた。
-5.1 で `getSensorsDataBatch` を足し、直前の `grab()` 以降のサンプルをまとめて返す形に直している。
-pocketsensor は最初からこの形にする。
-
 バッファは 2 秒分を上限とし、あふれたら古いものから捨てて `dev.stats` に数える。
-GNSS、気圧、電池のような低いレートのデータは、`dev.gnss.latest()` のように最新の 1 件を読む。
 
-すべてのメッセージを順に受け取りたい利用者には、`dev.messages(topics)` を用意する。
-トピック名、計測時刻、復号済みのメッセージを順に返す、低い層の API である。
+GNSS、気圧、電池のような低いレートのデータは、`dev.gnss.latest()` のように最新の 1 件を読む。
+`dev.messages(topics)` は、トピック名、計測時刻、復号済みのメッセージを、届いた順にすべて返す。
 
 ## 参照画像の anchor
 
@@ -133,15 +109,10 @@ GNSS、気圧、電池のような低いレートのデータは、`dev.gnss.lat
 | `frame_id`、`child_frame_id` | `<name>_odom` と `<name>_anchor_<画像の名前>` |
 
 端末は、追跡しているあいだだけ 0.5 秒おきに anchor を送る。
-追跡が外れると何も届かなくなるので、`latest()` は 1.5 秒より前に届いたものを返さない。
+`latest()` は、1.5 秒より前に届いたものを返さない。
 この長さは `latest(max_age_s=...)` で変えられ、`None` を渡すと古いものも返す。
 
-記録の再生では、届いた時刻の代わりに、再生している位置の計測時刻を基準にする。
-
-anchor はフレームの組へ入れない。
-レートが違ううえ、画像が映っていないあいだは届かないためである。
-端末は anchor を、姿勢を送る回にだけ載せる。
-このため `t_device_ns` は、どれかの `FrameSet` の計測時刻と必ず一致する。
+`t_device_ns` は、どれかの `FrameSet` の計測時刻と必ず一致する。
 同じ時刻の `frames.pose` と anchor を `ps.relative_pose` へ渡すと、端末から見た anchor の位置と姿勢が求まる。
 
 ## 時刻
@@ -162,7 +133,6 @@ anchor はフレームの組へ入れない。
 ずれの推定値は 2 つある。
 `offset_ns` はクライアントの単調時計が相手の値で、`HOST` への変換に使う。
 `wall_offset_ns` は、端末の壁時計からクライアントの壁時計を引いた値である。
-2 台の壁時計がどれだけ合っているかは後者で分かり、`pocketsensor info` もこちらを ms で表示する。
 
 ## 較正
 
@@ -171,23 +141,16 @@ anchor はフレームの組へ入れない。
 | `dev.calibration.intrinsics(stream)` | 解像度、fx、fy、cx、cy、歪みのモデル名、係数 |
 | `dev.calibration.extrinsics(source, target)` | `source` から `target` への 4×4 の変換。並進は m |
 | `dev.calibration.raw` | 端末が送った `device_info` の JSON そのまま |
+| `ps.deproject(depth, intrinsics)` | 深度から 3 次元の点を求める |
 
-外部パラメータを `extrinsics(source, target)` の形で引くのは、RealSense、Azure Kinect、Orbbec に共通する作法である。
-歪みは、モデル名と固定長の係数で表す。
 端末が測っていない並進（カメラと IMU のあいだ）は、0 ではなく NaN で返す。
-測っていないことは、端末が `device_info` の `calibrated` で知らせる。
-ZED の `SensorParameters` が同じ扱いをしている。
 
 内部パラメータはフレームごとに変わりうるので、`frames.color.intrinsics` がそのフレームの値を持つ。
 `dev.calibration.intrinsics` は、最後に受け取った値を返す。
 
-深度から 3 次元の点を求める関数 `ps.deproject(depth, intrinsics)` を、純粋関数として用意する。
-内部パラメータの縮尺、画素の原点、軸の向きは取り違えやすいので、利用者ごとの再実装を避けるためである。
-
 ## 記録と再生
 
 `dev.record(path)` は、受信したバイト列をそのまま MCAP へ書く。
-復号と再符号化をしないので、記録の負荷は小さい。
 `device_info` と時計合わせのサンプルも、同じファイルへ入る。
 
 記録ファイルは `ps.open(path)` で開く。
@@ -197,8 +160,6 @@ ZED の `SensorParameters` が同じ扱いをしている。
 | --- | --- |
 | `realtime=True` | 記録したときと同じ時間の進み方で返す。処理が遅いと、ライブと同じように組が捨てられる |
 | `realtime=False` | 呼び出しのたびに次の組を返す。1 つも捨てない |
-
-RealSense の `playback.set_real_time` と同じ区別で、前者は動作の再現に、後者は解析に使う。
 
 ## エラー
 
@@ -217,7 +178,6 @@ LiDAR の無い機種では、深度と confidence が一覧に現れない。
 
 受信は、SDK が持つ裏のスレッドで動かす。
 公開する API は同期の呼び出しで、どのスレッドから呼んでもよい。
-`asyncio` 向けの API は、同期の API が固まってから足す。
 
 ## コマンド
 
@@ -230,11 +190,8 @@ LiDAR の無い機種では、深度と confidence が一覧に現れない。
 | `pocketsensor check-axes <source>` | 端末を決まった向きへ動かしてもらい、座標軸と符号が約束どおりかを判定する |
 | `pocketsensor check-anchor <source>` | 参照画像を映してもらい、anchor の frame の軸の向きと、端末からの距離を判定する |
 
-`check-axes` は、端末を取り付けたあとの確認に使う。
-指示に従って端末を前、左、上へ動かし、上から見て反時計回りに回すと、`odom` の位置、yaw の符号、IMU の比力の符号を判定して結果を表示する。
-
-`check-anchor` は、参照画像の置き方（`--pose vertical` は壁や画面、`--pose horizontal` は机や床）を受け取る。
-端末が画像の表の側にいること（anchor の z が正）と、画像の上（anchor の x）か法線（anchor の z）が重力の逆を向くことを確かめる。
+`check-anchor` は、参照画像の置き方を `--pose` で受け取る。
+`vertical` は壁や画面、`horizontal` は机や床である。
 
 ## 依存
 
@@ -249,4 +206,3 @@ LiDAR の無い機種では、深度と confidence が一覧に現れない。
 | H.264 の復号 | `av` | 追加の依存（`pocketsensor[video]`） |
 
 usbmux のクライアントは、SDK の中に最小の実装を持つ。
-広く使われている `pymobiledevice3` は GPL-3.0 なので、依存にしない。
