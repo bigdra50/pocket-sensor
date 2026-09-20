@@ -4,7 +4,7 @@
   <name>pocketsensor_ros</name>
   <version>0.1.0</version>
   <description>Relay pocketsensor CDR streams onto ROS 2 topics.</description>
-  <maintainer email="pocketsensor@localhost">pocketsensor</maintainer>
+  <maintainer email="bigdra50@users.noreply.github.com">bigdra50</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>

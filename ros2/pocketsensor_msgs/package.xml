@@ -4,7 +4,7 @@
   <name>pocketsensor_msgs</name>
   <version>0.1.0</version>
   <description>Custom ROS 2 messages and services for pocketsensor.</description>
-  <maintainer email="pocketsensor@localhost">pocketsensor</maintainer>
+  <maintainer email="bigdra50@users.noreply.github.com">bigdra50</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

@@ -3,8 +3,9 @@
 iPhone の配信を ROS 2 のトピックへ流す中継ノードである。
 受け手 SDK が受け取った CDR のバイト列を、復号せずにそのまま publish する。
 
-ROS 2 の上での実行は、まだ確かめていない。
-中継の処理そのものは、擬似の rclpy と擬似デバイスを使ったテスト（`python/tests/test_ros2_relay.py`）で確かめている。
+ROS 2 Jazzy の上で、ビルドと実行を確かめてある。
+確かめ方は下の「確認」の節にある。
+中継の処理そのものは、擬似の rclpy と擬似デバイスを使ったテスト（`python/tests/test_ros2_relay.py`）でも確かめている。
 
 ## ビルド
 
@@ -78,6 +79,29 @@ tf2 と `message_filters` は `header.stamp` の近いメッセージどうし�
 | `/tf_static`、`device_info` | reliable、transient local、深さ 1 |
 | `/tf` | reliable、深さ 100 |
 | そのほか | reliable、深さ 10 |
+
+## 確認
+
+`mise run test:ros2` が、ROS 2 のコンテナの中で次のことを確かめる。
+Docker が要る。
+イメージは環境変数 `POCKETSENSOR_ROS_IMAGE` で選べ、指定しなければ `ros:jazzy-ros-base` を使う。
+
+| 確かめること | 方法 |
+| --- | --- |
+| `pocketsensor_msgs` と `pocketsensor_ros` のビルド | `colcon build` |
+| xacro のマクロ | 展開して `check_urdf` で木を確かめる |
+| 中継が出すトピックの型とレート | rclpy のノードで購読して数える |
+| `header.stamp` の書き換え | ROS の時計との差が 0.5 秒以内であることを見る |
+| `/tf_static` と `device_info` | 後から購読しても届くことを見る |
+| TF | `odom` から `link`、`link` から光学 frame と IMU、anchor を引く。`publish_tf:=false` では `link` から anchor だけが出ることも見る |
+| 深度と confidence の PNG | `image_transport` の `republish` で `sensor_msgs/Image` へ戻し、`16UC1` と `mono8` の 256×192 になることを見る |
+| SDK が記録した MCAP | `ros2 bag info` で読み、`ros2 bag play` で再生して受け取る |
+
+実機を相手にするときは、コンテナの中から届く URL を `SOURCE` で渡す。
+
+```
+SOURCE=ws://192.168.1.20:8765 mise run test:ros2
+```
 
 ## URDF
 

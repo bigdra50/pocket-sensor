@@ -19,8 +19,8 @@ setup(
     ],
     install_requires=["setuptools"],
     zip_safe=True,
-    maintainer="pocketsensor",
-    maintainer_email="pocketsensor@localhost",
+    maintainer="bigdra50",
+    maintainer_email="bigdra50@users.noreply.github.com",
     description="Relay pocketsensor CDR streams onto ROS 2 topics.",
     license="Apache-2.0",
     entry_points={

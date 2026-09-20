@@ -371,7 +371,14 @@ class RelayNode:
         try:
             pub.publish(data)
         except Exception:
-            log.exception("publish failed on %s", channel.topic)
+            # 終了のシグナルを受けると、rclpy は destroy() より先に context を無効にする。
+            # そのあいだに届いたメッセージの publish は必ず失敗するので、不具合として記録しない。
+            if not self._stop.is_set() and self._context_ok():
+                log.exception("publish failed on %s", channel.topic)
+
+    def _context_ok(self) -> bool:
+        context = getattr(self._node, "context", None)
+        return context is None or bool(context.ok())
 
 
 def main(args: list[str] | None = None) -> None:
@@ -387,13 +394,19 @@ def main(args: list[str] | None = None) -> None:
             self.relay.destroy()
             return super().destroy_node()
 
+    from rclpy.executors import ExternalShutdownException
+
     rclpy.init(args=args)
     node = _Node()
     try:
         rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        # SIGINT と SIGTERM では、rclpy のシグナルハンドラが先に context を止めている。
+        # shutdown() を重ねて呼ぶと RCLError になるので、止まっていなければ止める形にする。
+        rclpy.try_shutdown()
 
 
 if __name__ == "__main__":

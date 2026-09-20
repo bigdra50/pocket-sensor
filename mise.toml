@@ -53,6 +53,11 @@ depends = ["build:sim"]
 dir = "{{config_root}}/tools/foxglove-client-check"
 run = ["npm ci --no-audit --no-fund --silent", "node check.mjs"]
 
+[tasks."test:ros2"]
+description = "ROS 2 のコンテナの中で、中継、image_transport、TF、rosbag2 を確かめる（Docker が要る）。イメージは POCKETSENSOR_ROS_IMAGE で変える"
+depends = ["build:sim"]
+run = "ros2/docker/run_check.sh"
+
 [tasks."lint:python"]
 description = "Python の lint と整形の検査（SDK、ROS 2 の中継、例）"
 dir = "{{config_root}}/python"

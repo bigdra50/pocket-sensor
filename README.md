@@ -21,7 +21,7 @@ iPhone の RGB、LiDAR 深度、ARKit の自己位置、IMU、GNSS、地磁気�
 | Python SDK（接続、フレームの組、IMU、較正、時計合わせ、記録と再生、コマンド） | 実機（WiFi と USB）と擬似デバイスで確認した |
 | Lichtblick と Foxglove からの接続 | 両者が内部で使うクライアントと復号器で、全チャンネルの復号を確認した。画面での表示は確かめていない |
 | USB での接続 | 実機で確認した。破棄は 0 で、遅延の中央値は約 60 ms |
-| ROS 2 の中継 | 擬似の rclpy では確認した。ROS 2 の上では動かしていない |
+| ROS 2 の中継 | ROS 2 Jazzy のコンテナで、ビルド、実行、`image_transport` での深度の復号、rosbag2 での再生を確認した |
 | 参照画像の anchor | 擬似デバイスでは確認した。実機では、参照画像を登録して映す確認をしていない |
 | H.264、マイク、iPhone への出力 | 次の段階で足す |
 
@@ -101,6 +101,7 @@ uv、Swift、XcodeGen は、PATH にあるものを使う。
 | `mise run test:ios` | iOS アプリの単体テストをシミュレーターで走らせる（署名は要らない） |
 | `mise run test:e2e` | Swift の擬似デバイスと Python SDK を通しで確かめる |
 | `mise run test:foxglove-client` | Lichtblick と同じクライアントと復号器でサーバーを確かめる（node が要る） |
+| `mise run test:ros2` | ROS 2 のコンテナの中で、中継、`image_transport`、TF、rosbag2 を確かめる（Docker が要る） |
 | `mise run lint:python` | ruff の検査 |
 | `mise run gen` | `contract/` から Swift と Python の生成物を作り直す |
 
