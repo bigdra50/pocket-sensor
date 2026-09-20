@@ -138,7 +138,7 @@ public enum MessageBuilders {
     ///
     /// anchor を姿勢と同じ回にだけ載せるので、anchor の時刻は `odom` のどれかの時刻と必ず一致する。
     /// クライアントは、同じ時刻の姿勢と組にして、端末から見た anchor の位置を求められる。
-    /// 別々のメッセージにしないのは、`/tf` の背圧が最新 1 件の保持で、片方が捨てられるため。
+    /// 別々のメッセージにしないのは、`/tf` のバックプレッシャーが最新 1 件の保持で、片方が捨てられるため。
     public static func tfWithAnchors(
         stampNs: UInt64,
         names: FrameNames,

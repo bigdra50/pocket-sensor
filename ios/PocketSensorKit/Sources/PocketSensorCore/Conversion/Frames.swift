@@ -12,7 +12,7 @@ public enum Frames {
     /// 光学 frame への固定回転。R = Rz(-π/2) Ry(0) Rx(-π/2)。
     public static let linkToColorOptical = quaternion(roll: -.pi / 2, pitch: 0, yaw: -.pi / 2)
 
-    /// IMU frame への固定回転。R = Rz(0) Ry(-π/2) Rx(0)。並進は未較正のため 0。
+    /// IMU frame への固定回転。R = Rz(0) Ry(-π/2) Rx(0)。並進は未測定のため 0。
     public static let linkToImu = quaternion(roll: 0, pitch: -.pi / 2, yaw: 0)
 
     public static func arkitPoseToREP103(

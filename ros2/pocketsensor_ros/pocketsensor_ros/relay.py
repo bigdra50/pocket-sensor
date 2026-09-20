@@ -49,9 +49,10 @@ _STREAM_KEYS: dict[str, tuple[str, ...]] = {
     "gnss": Gnss().channel_keys(),
     "battery": Battery().channel_keys(),
 }
-# 較正（tf_static）と端末の情報が無いと、絞り込んだストリームを ROS 側で使えない。診断は 1 Hz で軽い。
+# キャリブレーション（tf_static）と端末の情報が無いと、絞り込んだストリームを ROS 側で使えない。
+# 診断は 1 Hz で軽い。
 _ALWAYS_KEYS = frozenset({"tf_static", "device_info", "diagnostics"})
-# 深度と confidence は、無圧縮と PNG の 2 通りで広告される。無圧縮の key から PNG の key への対応。
+# 深度と confidence は、無圧縮と PNG の 2 通りでアドバタイズされる。無圧縮の key から PNG の key への対応。
 _DEPTH_PNG_KEY = dict(zip(("depth_image", "depth_confidence"), _DEPTH_PNG_KEYS, strict=True))
 _DEPTH_TRANSPORTS = ("compressed", "raw", "both")
 _CONNECT_TIMEOUT_S = 5.0
@@ -115,8 +116,8 @@ def _expand_stream_tokens(tokens: list[str]) -> set[str] | None:
 def _skipped_depth_keys(transport: str, advertised: set[str]) -> set[str]:
     """深度を 1 通りだけ購読するために、購読しない key を返す。
 
-    両方を購読すると、端末は同じ深度を 2 通りに符号化して送る。
-    compressed でも、PNG を広告しない端末では無圧縮を使う。
+    両方を購読すると、端末は同じ深度を 2 通りにエンコードして送る。
+    compressed でも、PNG をアドバタイズしない端末では無圧縮を使う。
     """
     if transport == "both":
         return set()
@@ -197,8 +198,8 @@ def _xyzw(q: Any) -> tuple[float, float, float, float]:
 class RelayNode:
     """FoxgloveClient で受けた CDR を、そのまま ROS 2 の Publisher へ渡す。
 
-    端末のアプリが前面にいるあいだだけ接続できるので、つながらないときと切れたときは
-    reconnect_period ごとに接続し直す。
+    端末のアプリがフォアグラウンドにあるあいだだけ接続できるので、つながらないときと切れたときは
+    reconnect_period ごとに再接続する。
     """
 
     def __init__(self, ros_node: Any) -> None:
@@ -233,7 +234,7 @@ class RelayNode:
                 self._serve_one_session()
                 announced = False
             except (PocketSensorError, TimeoutError, OSError) as exc:
-                # 端末が前面に来るまで同じ失敗が続くので、続けて出さない。
+                # 端末がフォアグラウンドに来るまで同じ失敗が続くので、続けて出さない。
                 if not announced:
                     self._node.get_logger().warning(
                         f"cannot reach {self._source} ({exc}); retrying every {self._reconnect_period:g} s"
@@ -294,7 +295,7 @@ class RelayNode:
             client.subscribe(channel.topic)
 
     def _keep_clock(self, client: FoxgloveClient, lost: threading.Event) -> None:
-        """切れるか止められるまで居座る。stamp を書き換えるときは、その間に時計合わせを続ける。"""
+        """切れるか止められるまで居座る。stamp を書き換えるときは、その間に時刻同期を続ける。"""
         service = self._wait_clock_service(client) if self._rewrite else None
         samples = 1
         while not self._stop.is_set() and not lost.is_set():
@@ -313,7 +314,8 @@ class RelayNode:
                 log.debug("clock sync failed: %s", exc)
 
     def _wait_clock_service(self, client: FoxgloveClient, timeout: float = 3.0) -> str:
-        # services の広告は channels の広告とは別のメッセージで届く。wait_ready の直後はまだ無いことがある。
+        # services のアドバタイズは channels のアドバタイズとは別のメッセージで届く。
+        # wait_ready の直後はまだ無いことがある。
         deadline = time.monotonic() + timeout
         while True:
             for name in client.services:
@@ -363,7 +365,7 @@ class RelayNode:
                 with self._lock:
                     data = rewrite_header_stamp(channel.schema_name, data, self._map_ns)
             except ClockNotReady:
-                # 時計合わせが済むまでは捨てる。端末の時刻のまま出すと、ROS 側の時刻と混ざる。
+                # 時刻同期が済むまでは捨てる。端末の時刻のまま出すと、ROS 側の時刻と混ざる。
                 return
             except ProtocolError as exc:
                 self._node.get_logger().warning(f"stamp rewrite failed on {channel.topic}: {exc}")

@@ -4,7 +4,7 @@ import PocketSensorServer
 import QuartzCore
 import UIKit
 
-/// 前面にいるあいだの 1 セッション。背景へ回ると捨てて作り直す。
+/// フォアグラウンドにあるあいだの 1 セッション。バックグラウンドへ移ると破棄して作り直す。
 final class StreamingSession: @unchecked Sendable {
     let sessionId: String
     let server: FoxgloveServer

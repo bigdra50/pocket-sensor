@@ -1,4 +1,4 @@
-// Lichtblick と Foxglove が使うのと同じクライアントと復号器で、pocketsensor のサーバーを確かめる。
+// Lichtblick と Foxglove が使うのと同じクライアントとデコーダーで、pocketsensor のサーバーを確かめる。
 //
 //   node check.mjs                      擬似デバイス（pocketsensor-sim）を起動して確かめる
 //   node check.mjs ws://host:8765 [秒]  動いている端末を確かめる。秒は受信を続ける長さ（既定は 3.5）

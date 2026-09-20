@@ -34,7 +34,7 @@ def channel_topic(key: str, name: str) -> str:
 
 
 def topic_to_key(topic: str, name: str) -> str | None:
-    """広告された topic から契約の key を返す。"""
+    """アドバタイズされた topic から契約の key を返す。"""
     for key in _TOPIC_BY_KEY:
         if channel_topic(key, name) == topic:
             return key
@@ -84,7 +84,7 @@ class Depth:
         return Stream.DEPTH
 
     def channel_keys(self) -> tuple[str, ...]:
-        """広告を見ない。圧縮にするかは Device が open 時に決める。"""
+        """アドバタイズを見ない。圧縮にするかは Device が open 時に決める。"""
         if self.compressed is True:
             keys = ("depth_image_compressed", "depth_camera_info")
             if self.confidence:
@@ -234,7 +234,7 @@ RATE_PARAM_BY_STREAM: dict[Stream, str] = {
 
 
 def resolve_channel_keys(spec: StreamSpec, advertised: set[str]) -> tuple[str, ...]:
-    """Depth の圧縮チャンネルは、端末が広告したものを見て決める。"""
+    """Depth の圧縮チャンネルは、端末がアドバタイズしたものを見て決める。"""
     if isinstance(spec, Depth):
         return spec.resolve_channel_keys(advertised)
     return spec.channel_keys()

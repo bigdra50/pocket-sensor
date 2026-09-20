@@ -95,7 +95,7 @@ private struct SimRates {
     var epoch: UInt32
 }
 
-/// 実サーバー上でセンサー値を合成する。購読があるチャンネルだけ符号化する。
+/// 実サーバー上でセンサー値を合成する。購読があるチャンネルだけエンコードする。
 final class SimulatedDevice: @unchecked Sendable {
     private let server: FoxgloveServer
     private let anchor: ClockAnchor

@@ -18,7 +18,7 @@ from pocketsensor.testing import FakeDevice
 
 REPO = Path(__file__).resolve().parents[2]
 
-# 端末の時計を壁時計から 3 秒ずらす。書き換えの有無が stamp から判別できる大きさにする。
+# 端末のクロックをシステム時刻から 3 秒ずらす。書き換えの有無が stamp から判別できる大きさにする。
 _OFFSET_NS = 3_000_000_000
 _NEAR_NS = 500_000_000
 
@@ -207,7 +207,7 @@ def _depth_topics(relay_module: Any, fake: FakeDevice, **params: Any) -> set[str
 
 
 def test_relay_asks_the_device_for_one_depth_variant_only(relay_module: Any) -> None:
-    # 両方を購読すると、端末は同じ深度を 2 通りに符号化して送る。帯域を減らすための圧縮が逆に働く。
+    # 両方を購読すると、端末は同じ深度を 2 通りにエンコードして送る。帯域を減らすための圧縮が逆に働く。
     with FakeDevice(port=0, seed=0) as fake:
         assert _depth_topics(relay_module, fake) == _DEPTH_PNG
         assert _depth_topics(relay_module, fake, depth_transport="raw") == _DEPTH_RAW

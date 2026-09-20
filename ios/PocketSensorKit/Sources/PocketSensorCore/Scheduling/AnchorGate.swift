@@ -1,4 +1,4 @@
-/// 参照画像 anchor は追跡中だけ、名前ごとに intervalS を超えない間隔で送る。未追跡は送らない。
+/// 参照画像 anchor はトラッキング中だけ、名前ごとに intervalS を超えない間隔で送る。トラッキングしていないものは送らない。
 public struct AnchorGate: Equatable, Sendable {
     public var intervalS: Double
     private var lastSent: [String: Double]

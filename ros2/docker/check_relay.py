@@ -3,7 +3,7 @@
 
 確かめること
   - 標準の型と pocketsensor_msgs の型で、期待する数のメッセージが届く
-  - header.stamp が、このマシンの壁時計の近くへ書き換わっている
+  - header.stamp が、このマシンのシステム時刻の近くへ書き換わっている
   - transient local の device_info と /tf_static が、後から購読しても届く
   - TF の木から、odom -> link、link -> 光学 frame、anchor が引ける
   - image_transport の republish が、compressedDepth と compressed を sensor_msgs/Image へ戻せる
@@ -51,7 +51,7 @@ class Checker(Node):
         self._watch(CameraInfo, f"{prefix}/depth/camera_info", 10)
         self._watch(DiagnosticArray, "/diagnostics", 10)
         self._watch(String, f"{prefix}/device_info", LATCHED)
-        # republish の出力。上流の復号器が、端末の PNG を sensor_msgs/Image へ戻したもの。
+        # republish の出力。上流のデコーダーが、端末の PNG を sensor_msgs/Image へ戻したもの。
         self._watch(Image, "/check/depth_raw", qos_profile_sensor_data)
         self._watch(Image, "/check/confidence_raw", qos_profile_sensor_data)
 
@@ -124,7 +124,7 @@ def main() -> int:
         problems.append("device_info was delivered more than once: is another relay running?")
 
     for topic, error in node.stamp_error_s.items():
-        # 中継は stamp を壁時計へ書き換える。端末の時計のままなら、擬似デバイスでも数十秒は離れる。
+        # 中継は stamp をシステム時刻へ書き換える。端末のクロックのままなら、擬似デバイスでも数十秒は離れる。
         if abs(error) > 0.5:
             problems.append(f"{topic}: header.stamp is {error:+.3f} s from the ROS clock")
 

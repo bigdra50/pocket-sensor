@@ -84,7 +84,8 @@ def test_theil_sen_drift_and_device_to_host() -> None:
 def test_clock_view_reports_the_wall_offset_separately() -> None:
     host = ClockEstimator()
     wall = ClockEstimator()
-    # 端末の wire 時刻は壁時計に anchor してある。単調時計とのずれは巨大で、壁時計とのずれだけが人に読める。
+    # 端末の wire 時刻はシステム時刻に anchor してある。
+    # モノトニッククロックとのオフセットは巨大で、システム時刻とのオフセットだけが人に読める。
     host.add(ClockSample(1_000, 1_700_000_000_000_001_500, 1_700_000_000_000_001_500, 2_000))
     wall.add(ClockSample(10_000, 22_500, 22_500, 11_000))
     view = ClockView(host, wall)

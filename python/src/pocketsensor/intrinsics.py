@@ -21,7 +21,7 @@ class Intrinsics:
 
 
 def scale_intrinsics(intrinsics: Intrinsics, new_width: int, new_height: int) -> Intrinsics:
-    """画素中心を原点とする約束で、主点へ 0.5 の補正を入れて縮尺する。"""
+    """画素中心を原点とする規約で、主点へ 0.5 の補正を入れて縮尺する。"""
     sx = new_width / intrinsics.width
     sy = new_height / intrinsics.height
     return Intrinsics(

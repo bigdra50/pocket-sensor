@@ -161,7 +161,7 @@ def test_imu_stream_maps_to_the_imu_link_frame() -> None:
 
 
 def test_uncalibrated_translation_follows_the_flag_in_device_info() -> None:
-    # 並進が未較正かどうかは、端末が device_info で知らせる。frame 名から推測しない。
+    # 並進が未測定かどうかは、端末が device_info で知らせる。frame 名から推測しない。
     unknown = Calibration(_info(imu_calibrated=False), _static_tf(), {})
     assert np.isnan(unknown.extrinsics(Stream.POSE, Stream.IMU)[:3, 3]).all()
     known = Calibration(_info(imu_calibrated=True), _static_tf(), {})

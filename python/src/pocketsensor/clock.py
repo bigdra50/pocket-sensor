@@ -124,7 +124,7 @@ class ClockEstimator:
 
 
 class ClockView:
-    """単調時計向けと壁時計向けの 2 つの推定を読む。"""
+    """モノトニッククロック向けとシステム時刻向けの 2 つの推定を読む。"""
 
     def __init__(self, host: ClockEstimator, wall: ClockEstimator, lock: object | None = None) -> None:
         self._host = host
@@ -146,10 +146,11 @@ class ClockView:
 
     @property
     def wall_offset_ns(self) -> float:
-        """端末の壁時計からクライアントの壁時計を引いた値。
+        """端末のシステム時刻からクライアントのシステム時刻を引いた値。
 
-        offset_ns はクライアントの単調時計が相手なので、起動からの秒数と壁時計の差が入った巨大な値になる。
-        人が読む用途と、2 台の壁時計の合い具合を見る用途には、こちらを使う。
+        offset_ns はクライアントのモノトニッククロックに対する値なので、
+        起動からの秒数とシステム時刻の差が入った巨大な値になる。
+        人が読む用途と、2 台のシステム時刻の差を見る用途には、こちらを使う。
         """
         with self._guard():
             return self._wall.offset_ns

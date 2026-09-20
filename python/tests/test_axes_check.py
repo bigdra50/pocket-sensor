@@ -93,7 +93,7 @@ def test_still_agrees_with_odom_up_when_the_phone_is_tilted() -> None:
 def test_still_fails_when_imu_axes_are_swapped() -> None:
     n = 20
     positions, quats = _constant_poses(n)
-    # 変換を掛けず、imu の +z に比力を置いた誤った約束。
+    # 変換を掛けず、imu の +z に比力を置いた誤った規約。
     f_imu = np.tile(np.array([0.0, 0.0, G]), (n, 1))
     verdict, _gravity = judge_still(positions, quats, np.full(n, _NORMAL), _times(n), f_imu)
     assert verdict.status == "FAIL"

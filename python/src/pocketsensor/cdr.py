@@ -1,4 +1,4 @@
-"""ROS 2 CDR の符号化と復号。契約の .msg だけを型の正本にする。"""
+"""ROS 2 CDR のエンコードとデコード。契約の .msg だけを型の正本にする。"""
 
 from __future__ import annotations
 

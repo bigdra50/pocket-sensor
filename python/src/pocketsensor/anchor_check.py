@@ -1,4 +1,4 @@
-"""参照画像の anchor の向きが、約束どおりかを判定する。
+"""参照画像の anchor の向きが、規約どおりかを判定する。
 
 anchor の frame は、z が画像の表から手前へ出る法線、x が画像の上、y が画像の左である
 （docs/frames-and-units.md）。

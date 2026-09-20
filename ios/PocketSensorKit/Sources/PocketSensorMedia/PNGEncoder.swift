@@ -4,7 +4,7 @@ import ImageIO
 
 /// 深度と confidence を PNG にする。画素値はそのまま。16 bit のソースは LE、PNG の中は BE。
 public enum PNGEncoder {
-    /// None / Sub / Up。ImageIO が無視しても符号化は正しい。
+    /// None / Sub / Up。ImageIO が無視してもエンコードは正しい。
     static let pngFilterNoneSubUp = 0x08 | 0x10 | 0x20
 
     public static func gray16(width: Int, height: Int, pixels: Data) -> Data? {

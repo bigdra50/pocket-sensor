@@ -1,4 +1,4 @@
-"""Foxglove WebSocket プロトコル v1 の符号化。ソケットを持たない。"""
+"""Foxglove WebSocket プロトコル v1 のエンコード。ソケットを持たない。"""
 
 from __future__ import annotations
 

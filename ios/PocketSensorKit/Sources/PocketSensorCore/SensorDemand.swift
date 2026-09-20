@@ -105,7 +105,7 @@ public enum SensorDemand {
     }
 }
 
-/// 再接続やパネル切替でセンサーが止まってすぐ動き直さないための猶予。
+/// 再接続やパネル切替でセンサーが止まってすぐ再開するのを避けるための猶予。
 public struct SensorHold: Equatable, Sendable {
     public var holdSeconds: Double
     private var arkit = Field()

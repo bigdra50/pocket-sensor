@@ -1,4 +1,4 @@
-"""CDR の header.stamp だけを、復号せずに書き換える。"""
+"""CDR の header.stamp だけを、デコードせずに書き換える。"""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ __all__ = ["rewrite_header_stamp"]
 
 
 def rewrite_header_stamp(schema_name: str, cdr: bytes, map_ns: Callable[[int], int]) -> bytes:
-    """device の wire 時刻を map_ns で壁時計へ写し、Header.stamp だけを差し替える。
+    """device の wire 時刻を map_ns でシステム時刻へ換算し、Header.stamp だけを差し替える。
 
     先頭が std_msgs/Header の型は、バイト 4..12 をコピー上で書き換える。
     TFMessage は配列の各 TransformStamped の Header を辿る。

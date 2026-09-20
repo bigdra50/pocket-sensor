@@ -28,7 +28,7 @@ public struct Intrinsics: Equatable, Sendable {
         cy = m[2][1]
     }
 
-    /// 画素中心を原点とする約束で、主点へ 0.5 の補正を入れて縮尺する。
+    /// 画素中心を原点とする規約で、主点へ 0.5 の補正を入れて縮尺する。
     public func scaled(toWidth newWidth: Int, height newHeight: Int) -> Intrinsics {
         let sx = Double(newWidth) / Double(width)
         let sy = Double(newHeight) / Double(height)

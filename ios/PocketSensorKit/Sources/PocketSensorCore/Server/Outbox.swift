@@ -12,7 +12,7 @@ public struct OutboundItem: Equatable, Sendable {
     }
 }
 
-/// 接続ごとの送信待ち。サーバーは 1 接続につき同時に 1 つの WebSocket メッセージだけを送る。
+/// 接続ごとの送信キュー。サーバーは 1 接続につき同時に 1 つの WebSocket メッセージだけを送る。
 public struct Outbox: Equatable, Sendable {
     public static let keepCap = 256
 

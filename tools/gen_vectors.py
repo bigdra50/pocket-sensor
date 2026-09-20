@@ -646,7 +646,7 @@ def decode_png_pixels(png: bytes, kind: str) -> list[int]:
 
 
 def png_json_is_valid(path: Path) -> bool:
-    """PNG バイトは zlib の版で変わりうるので、復号結果だけを見る。"""
+    """PNG バイトは zlib の版で変わりうるので、デコード結果だけを見る。"""
     spec = {row["name"]: row for row in png_cases_spec()}
     if not path.exists():
         return False

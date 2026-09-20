@@ -8,7 +8,7 @@ public enum MagCalibration: String, Equatable, Sendable {
     case high
 
     /// Core Motion の `CMMagneticFieldCalibrationAccuracy.rawValue`。
-    /// -1 が未較正、0 / 1 / 2 が low / medium / high。
+    /// -1 が uncalibrated、0 / 1 / 2 が low / medium / high。
     public static func fromAccuracyRaw(_ raw: Int32) -> MagCalibration {
         switch raw {
         case -1: return .uncalibrated

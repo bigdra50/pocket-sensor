@@ -1,6 +1,6 @@
 import Foundation
 
-/// CDR の符号化で起きる誤り。不正な入力ではトラップせず、これを投げる。
+/// CDR のエンコードで起きる誤り。不正な入力ではトラップせず、これを投げる。
 public enum CDRError: Error, Equatable {
     case truncated
     case badHeader

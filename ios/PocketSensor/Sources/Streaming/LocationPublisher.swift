@@ -2,7 +2,7 @@ import Foundation
 import PocketSensorCore
 import PocketSensorServer
 
-/// GNSS の測位を navSatFix と timeReference にする。header は単調時計へ写した値。
+/// GNSS の測位を navSatFix と timeReference にする。header はモノトニッククロックへ換算した値。
 final class LocationPublisher {
     private let runtime: StreamingRuntime
 

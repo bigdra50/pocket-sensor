@@ -1,4 +1,4 @@
-"""受信した CDR バイト列を MCAP へ書く。復号しない。"""
+"""受信した CDR バイト列を MCAP へ書く。デコードしない。"""
 
 from __future__ import annotations
 

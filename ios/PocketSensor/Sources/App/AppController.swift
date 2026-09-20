@@ -5,7 +5,7 @@ import QuartzCore
 import simd
 import UIKit
 
-/// ARKit と Core Motion などの capture を持ち、前面セッションを配信サーバーへ繋ぐ。
+/// ARKit と Core Motion などの capture を持ち、フォアグラウンドのセッションを配信サーバーへ繋ぐ。
 @MainActor
 final class AppController: ObservableObject {
     @Published private(set) var snapshot = SensorSnapshot()

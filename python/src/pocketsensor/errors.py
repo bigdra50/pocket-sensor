@@ -16,7 +16,7 @@ class ConnectionLost(PocketSensorError):
 
 
 class ProtocolError(PocketSensorError):
-    """端末が約束と違うメッセージを送ってきた。"""
+    """端末がプロトコルに反するメッセージを送ってきた。"""
 
 
 class Unsupported(PocketSensorError):
@@ -24,4 +24,4 @@ class Unsupported(PocketSensorError):
 
 
 class ClockNotReady(PocketSensorError):
-    """時計合わせのサンプルがまだ無く、HOST 時刻を求められない。"""
+    """時刻同期のサンプルがまだ無く、HOST 時刻を求められない。"""

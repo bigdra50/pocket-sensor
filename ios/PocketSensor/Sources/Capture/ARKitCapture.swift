@@ -87,7 +87,7 @@ final class ARKitCapture: NSObject, ARSessionDelegate, @unchecked Sendable {
         if let images = ARReferenceImage.referenceImages(inGroupNamed: "Anchors", bundle: nil), !images.isEmpty {
             configuration.detectionImages = images
             // 検出だけ（0）にすると anchor の transform が検出時のまま古くなり、isTracked も更新されない。
-            // 1 枚の追跡なら CPU は小さく、視野に入っている間だけ新しい transform が届く
+            // 1 枚のトラッキングなら CPU は小さく、視野に入っている間だけ新しい transform が届く
             configuration.maximumNumberOfTrackedImages = 1
         }
         return configuration

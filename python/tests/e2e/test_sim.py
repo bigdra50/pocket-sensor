@@ -183,7 +183,7 @@ def test_calibration_latched_after_sim_started(sim_device: str) -> None:
         expected_r = quat_to_matrix(rpy_to_quaternion(*LINK_TO_COLOR_OPTICAL_RPY))
         np.testing.assert_allclose(actual[:3, :3], expected_r, atol=1e-6)
         np.testing.assert_allclose(actual[:3, 3], 0.0, atol=1e-9)
-        # ストリームでの指定は device_info の frames を引く。IMU の並進は未較正なので NaN で返る。
+        # ストリームでの指定は device_info の frames を引く。IMU の並進は未測定なので NaN で返る。
         by_stream = dev.calibration.extrinsics(ps.Stream.COLOR, ps.Stream.POSE)
         np.testing.assert_allclose(by_stream, actual, atol=1e-9)
         to_imu = dev.calibration.extrinsics(ps.Stream.POSE, ps.Stream.IMU)

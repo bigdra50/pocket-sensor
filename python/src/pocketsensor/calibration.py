@@ -45,7 +45,7 @@ def _invert_t(t: NDArray[np.float64]) -> NDArray[np.float64]:
 
 
 class Calibration:
-    """最新の camera_info と /tf_static から較正を引く。"""
+    """最新の camera_info と /tf_static からキャリブレーションを引く。"""
 
     def __init__(
         self,
@@ -63,7 +63,7 @@ class Calibration:
         for item in self._tf_static:
             parent = str(item["parent"])
             child = str(item["child"])
-            # 並進が較正済みかどうかは、端末が device_info で知らせる。知らせが無い変換は較正済みとして扱う。
+            # 並進が測定済みかどうかは、端末が device_info で知らせる。知らせが無い変換は測定済みとして扱う。
             known = calibrated.get((parent, child), True)
             t = _make_t(item["rotation_xyzw"], item["translation"])
             self._edges[(parent, child)] = (t, known)
@@ -99,7 +99,7 @@ class Calibration:
         return frame
 
     def extrinsics(self, source_frame: str | Stream, target_frame: str | Stream) -> NDArray[np.float64]:
-        """source の点を target の座標へ写す 4x4。未較正の並進は NaN。"""
+        """source の点を target の座標へ写す 4x4。未測定の並進は NaN。"""
         source = self._resolve_frame(source_frame)
         target = self._resolve_frame(target_frame)
         if source == target:

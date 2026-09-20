@@ -1,4 +1,4 @@
-/// セッション開始時に 1 回だけ求める、壁時計と単調時計の差。
+/// セッション開始時に 1 回だけ求める、システム時刻とモノトニッククロックの差。
 public struct ClockAnchor: Equatable, Sendable {
     public var wallNs: Int64
     public var monoNs: Int64
@@ -38,7 +38,7 @@ public struct ClockAnchor: Equatable, Sendable {
         return UInt64(sum)
     }
 
-    /// CLLocation.timestamp は壁時計なので、単調時計へ戻す。
+    /// CLLocation.timestamp はシステム時刻なので、モノトニッククロックへ換算する。
     /// t_sensor = mono(now) - (wall(now) - wallTimestamp)
     public func sensorSeconds(wallTimestampNs: Int64, nowWallNs: Int64, nowMonoNs: Int64) -> Double {
         let (wallDelta, wallOverflow) = nowWallNs.subtractingReportingOverflow(wallTimestampNs)
@@ -54,7 +54,7 @@ public struct ClockAnchor: Equatable, Sendable {
     }
 }
 
-/// サンプル時刻と到着時刻が同じ単調時計かを見る。差が 0 秒から 0.5 秒なら ok。
+/// サンプル時刻と到着時刻が同じモノトニッククロックかを見る。差が 0 秒から 0.5 秒なら ok。
 public enum ClockSelfCheck: Equatable, Sendable {
     case ok(delta: Double)
     case suspicious(delta: Double)
