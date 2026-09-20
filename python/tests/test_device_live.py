@@ -273,3 +273,21 @@ def test_depth_default_falls_back_when_device_omits_compressed() -> None:
             assert frames.depth is not None
             assert "/pocketsensor/depth/image" in dev.stats.received_messages
             assert "/pocketsensor/depth/image/compressedDepth" not in dev.stats.received_messages
+
+
+def test_gnss_fix_gets_its_time_reference_even_though_it_arrives_later() -> None:
+    # 端末は、同じ時刻の測位を先に、time_reference を後に送る。
+    cfg = ps.Config(streams=(ps.Gnss(),), open_timeout=5.0)
+    with FakeDevice(port=0, seed=0) as fake:
+        with ps.open(fake.url, cfg) as dev:
+
+            def paired() -> bool:
+                fix = dev.gnss.latest()
+                return fix is not None and fix.time_ref_ns is not None
+
+            _wait_until(paired, timeout=3.0)
+            fix = dev.gnss.latest()
+            assert fix is not None
+            assert fix.time_ref_ns == fake._start_wall
+            # 溜め込まない。測位は 1 Hz で届き続ける。
+            assert len(dev._gnss_time_ref) <= 8

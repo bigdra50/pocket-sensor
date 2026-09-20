@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import threading
 import time
@@ -58,6 +59,8 @@ from pocketsensor.types import (
     MagSample,
     PressureSample,
 )
+
+_GNSS_TIME_REF_KEPT = 8
 
 log = logging.getLogger("pocketsensor.device")
 
@@ -597,7 +600,7 @@ class Device:
             self._pressure.set(decode_pressure(msg, arrival))
             return
         if key == "gnss_time_reference":
-            self._gnss_time_ref[stamp_to_ns(msg.header.stamp)] = stamp_to_ns(msg.time_ref)
+            self._remember_gnss_time_ref(stamp_to_ns(msg.header.stamp), stamp_to_ns(msg.time_ref))
             return
         if key == "gnss_fix":
             time_ref = self._gnss_time_ref.get(stamp_to_ns(msg.header.stamp))
@@ -605,6 +608,16 @@ class Device:
             return
         if key == "battery":
             self._battery.set(decode_battery(msg, arrival))
+
+    def _remember_gnss_time_ref(self, stamp_ns: int, time_ref_ns: int) -> None:
+        """同じ時刻の測位へ GNSS の時刻を結び付ける。2 つは別のチャンネルなので、届く順序を仮定しない。"""
+        self._gnss_time_ref[stamp_ns] = time_ref_ns
+        # 測位は届き続ける。順序の入れ替わりを吸収できる数だけ残す。
+        while len(self._gnss_time_ref) > _GNSS_TIME_REF_KEPT:
+            del self._gnss_time_ref[next(iter(self._gnss_time_ref))]
+        fix = self._gnss.get()
+        if fix is not None and fix.t_device_ns == stamp_ns and fix.time_ref_ns is None:
+            self._gnss.set(dataclasses.replace(fix, time_ref_ns=time_ref_ns))
 
     def _try_color(self, t_ns: int, arrival: int) -> None:
         msg = self._color_msg_at.get(t_ns)
