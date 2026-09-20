@@ -1,7 +1,7 @@
 # pocketsensor の設計
 
 pocketsensor は、iPhone をロボットなど他のシステムへ組み込めるセンサーデバイスにする。
-iOS アプリが iPhone のセンサーを配信し、受け手の SDK がそれを ZED や RealSense と同じ作法で開く。
+iOS アプリが iPhone のセンサーを配信し、Python SDK がそれを ZED や RealSense と同じ作法で開く。
 この文書は、立ち位置、全体の構成、決定事項とその理由をまとめる。
 個別の約束は次の文書に分けてある。
 
@@ -10,7 +10,7 @@ iOS アプリが iPhone のセンサーを配信し、受け手の SDK がそれ
 | [protocol.md](protocol.md) | 接続、チャンネル、設定、サービス、背圧 |
 | [frames-and-units.md](frames-and-units.md) | 座標系と単位の約束、Apple の値からの変換 |
 | [time.md](time.md) | 端末の時計、時刻の付け方、時計合わせ |
-| [sdk-api.md](sdk-api.md) | 受け手 SDK の API |
+| [sdk-api.md](sdk-api.md) | Python SDK の API |
 | [research/](research/) | 設計の根拠にした調査の記録 |
 
 ## 立ち位置
@@ -53,7 +53,7 @@ ROS 2 は必須にせず、受け手側のアダプタとして足す。
 | --- | --- | --- |
 | iOS アプリ | `ios/` | センサーの取得、REP-103 と SI への変換、符号化、配信。画面は状態の表示と最小の操作に留める |
 | 契約 | `contract/` | `.msg`、チャンネルの表、parameters と services のスキーマ |
-| 受け手 SDK | `python/` | 発見、接続、復号、時計の対応付け、較正、フレームの組、記録と再生 |
+| Python SDK | `python/` | 発見、接続、復号、時計の対応付け、較正、フレームの組、記録と再生 |
 | ROS 2 中継 | `ros2/` | 受け取った CDR のバイト列を ROS 2 のトピックへ流す。URDF の xacro も持つ |
 | 例 | `examples/` | Rerun での表示、OpenCV での表示、LeRobot のデータセットへの記録 |
 
@@ -76,7 +76,7 @@ ROS 2 は必須にせず、受け手側のアダプタとして足す。
 | 背圧 | 画像、深度、姿勢は接続ごとに最新 1 件を保持する。IMU は上限付きのキューにする | 遅い受け手へ古いフレームが届き続けるのを防ぐ。IMU は積分に使うので、欠落をできるだけ避ける |
 | 圧縮 | RGB は JPEG で送る。深度は `16UC1` の無圧縮と、PNG の可逆圧縮の 2 本を出し、受け手が購読で選ぶ | JPEG と PNG はフレーム単位で復号でき、受け手に FFmpeg が要らない。深度の PNG は、WiFi で無圧縮の深度が帯域の大半を占めたので足した。H.264 は、それでも帯域が足りなくなった段階で足す |
 | センサーの起動 | センサー群ごとに、購読している接続があるか、アプリの設定でその区画の表示が ON のときだけ動かす。ARKit と LiDAR もこの対象にする | ARKit と LiDAR は消費電力が大きく、誰も使っていないのに動かし続けると端末が熱を持つ。実機では 1 時間あまりの使用で熱の状態が serious になり、レートが落ちた |
-| 受け手 SDK | Python を先行させ、実機、記録、ネットワークを同じ API で開く | ロボット学習と ROS の利用者は Python が中心である。ZED、Orbbec、Ouster が同じ形を採っている |
+| SDK の言語 | Python を先行させ、実機、記録、ネットワークを同じ API で開く | ロボット学習と ROS の利用者は Python が中心である。ZED、Orbbec、Ouster が同じ形を採っている |
 | 記録 | MCAP へ、受信したバイト列をそのまま書く | 復号と再符号化が要らない。スキーマと較正がファイルに入り、Lichtblick と rosbag2 の両方で開ける |
 | カメラのモード | ARKit から始める | 姿勢を取れるのは ARKit だけである。AVFoundation の LiDAR 深度カメラは、姿勢が要らない用途のために後で足す |
 | 派生データ | アプリは生データとメタデータだけを流す | 疑似 LaserScan のような加工は、ロボットごとに条件が違う。受け手側の `pointcloud_to_laserscan` や Nav2 の costmap が、高さの帯で切れる |

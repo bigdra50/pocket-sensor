@@ -1,6 +1,6 @@
 # 例
 
-`examples/` のスクリプトは受け手 SDK の使い方を短く示す。
+`examples/` のスクリプトはPython SDK の使い方を短く示す。
 リポジトリのルートで実行する。
 `--project python` で SDK の環境を使い、例ごとの依存は `--with` で足す。
 

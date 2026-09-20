@@ -1,6 +1,6 @@
-# 受け手 SDK の API
+# Python SDK の API
 
-受け手の SDK は、iPhone を ZED や RealSense と同じ作法で開けるようにする。
+Python SDK は、iPhone を ZED や RealSense と同じ作法で開けるようにする。
 最初の実装は Python で、ROS 2 には依存しない。
 この文書は、API の形と、その形にした理由を定める。
 倣った SDK の事実は [research/sdk-conventions-depth-cameras.md](research/sdk-conventions-depth-cameras.md) と [research/sdk-conventions-lidars.md](research/sdk-conventions-lidars.md) にある。

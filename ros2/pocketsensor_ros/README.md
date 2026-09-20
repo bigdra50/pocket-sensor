@@ -1,7 +1,7 @@
 # pocketsensor_ros
 
 iPhone の配信を ROS 2 のトピックへ流す中継ノードである。
-受け手 SDK が受け取った CDR のバイト列を、復号せずにそのまま publish する。
+Python SDK が受け取った CDR のバイト列を、復号せずにそのまま publish する。
 
 ROS 2 Jazzy の上で、ビルドと実行を確かめてある。
 確かめ方は下の「確認」の節にある。
@@ -10,7 +10,7 @@ ROS 2 Jazzy の上で、ビルドと実行を確かめてある。
 ## ビルド
 
 ROS 2 のワークスペースで、2 つのパッケージを `--paths` で指定する。
-受け手 SDK（`python/`）は、ROS 2 が使う Python へ先に入れておく。
+Python SDK（`python/`）は、ROS 2 が使う Python へ先に入れておく。
 
 ```
 pip install ./python

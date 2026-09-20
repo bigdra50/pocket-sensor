@@ -21,7 +21,7 @@ if [ ${#missing[@]} -gt 0 ]; then
   apt-get update -qq && apt-get install -y -qq "${missing[@]}" >/dev/null
 fi
 
-echo "== 受け手 SDK を ROS 2 の Python へ入れる"
+echo "== Python SDK を ROS 2 の Python へ入れる"
 cp -r /repo/python /tmp/sdk && pip3 install --quiet --break-system-packages /tmp/sdk
 
 echo "== colcon build"

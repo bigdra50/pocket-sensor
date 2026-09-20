@@ -114,7 +114,7 @@ ROS 2 の側は、`image_transport` の `republish` で `sensor_msgs/Image` へ�
 無圧縮の深度と confidence は、15 Hz で毎秒 2.2 MB になる。
 WiFi では最新 1 件を保持する背圧のチャンネルが 1 割ほど捨てられており、この 2 つが帯域の大半を占めていた。
 測定は [research/on-device-measurements.md](research/on-device-measurements.md) にある。
-受け手 SDK は、端末が広告していれば圧縮のほうを購読する。
+Python SDK は、端末が広告していれば圧縮のほうを購読する。
 表示ツールで深度を色付きで見たいときは、無圧縮の `depth/image` を購読する。
 
 ### 追跡の状態
