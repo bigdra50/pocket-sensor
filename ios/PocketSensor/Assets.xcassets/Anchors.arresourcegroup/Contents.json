@@ -1,9 +1,14 @@
 {
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
+  "info": {
+    "author": "xcode",
+    "version": 1
   },
-  "resources" : [
-
+  "resources": [
+    {
+      "filename": "marker_a.arreferenceimage"
+    },
+    {
+      "filename": "marker_b.arreferenceimage"
+    }
   ]
 }
