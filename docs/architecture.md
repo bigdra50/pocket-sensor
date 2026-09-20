@@ -213,10 +213,9 @@ xlerobot-book の実験は、pocketsensor が前身と同じ機能（姿勢、�
 
 ## 実機で確かめること
 
-加速度の符号、センサーの時刻の時計、座標軸の対応、usbmux 経由での到達は、実機の測定で確かめた。
-記録は [research/on-device-measurements.md](research/on-device-measurements.md) にある。
+時計、座標軸と符号、参照画像の anchor、usbmux 経由での到達は、実機の測定で確かめた。
+記録は [research/on-device-measurements.md](research/on-device-measurements.md) にあり、座標と単位に関わる結果は [frames-and-units.md](frames-and-units.md) の表にもまとめてある。
 残っているのは次の項目である。
-座標と単位に関わる残りの項目は、[frames-and-units.md](frames-and-units.md) の表にある。
 
 | 項目 | 見込み | 確かめ方 |
 | --- | --- | --- |

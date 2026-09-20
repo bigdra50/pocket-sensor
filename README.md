@@ -22,7 +22,7 @@ iPhone の RGB、LiDAR 深度、ARKit の自己位置、IMU、GNSS、地磁気�
 | Lichtblick からの接続 | 実機へ直接つなぎ、TF、RGB、深度、IMU の表示を確認した。`compressedDepth` だけは Lichtblick が復号できないので、表示には無圧縮の深度を使う |
 | USB での接続 | 実機で確認した。破棄は 0 で、遅延の中央値は約 60 ms |
 | ROS 2 の中継 | ROS 2 Jazzy のコンテナで、ビルド、実行、`image_transport` での深度の復号、rosbag2 での再生を確認した |
-| 参照画像の anchor | 擬似デバイスでは確認した。実機では、参照画像を登録して映す確認をしていない |
+| 参照画像の anchor | 実機で、ディスプレイへ出した目印を映し、anchor の軸の向きを確認した |
 | H.264、マイク、iPhone への出力 | 次の段階で足す |
 
 実機での測定の記録は [docs/research/on-device-measurements.md](docs/research/on-device-measurements.md) にある。
