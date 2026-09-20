@@ -121,6 +121,9 @@ final class SimulatedDevice: @unchecked Sendable {
     private var imuReference = ImuReferenceFrame.arbitrary
     private var deviceName: String
     private var frameIndex: UInt64 = 0
+    private var schedule = FrameSchedule()
+    /// 擬似の ARFrame を作る周期（枚/秒）
+    private static let arframeFps = 60.0
     private var timers: [DispatchSourceTimer] = []
     private var colorBuffer: CVPixelBuffer?
     private var depthBuffer: CVPixelBuffer?
@@ -167,7 +170,7 @@ final class SimulatedDevice: @unchecked Sendable {
             self?.publishLatched()
         }
         publishLatched()
-        startTimer(1.0 / 60.0, queue: arframeQueue, strict: false, leeway: .milliseconds(2)) { [weak self] in
+        startTimer(1.0 / Self.arframeFps, queue: arframeQueue, strict: false, leeway: .milliseconds(2)) { [weak self] in
             self?.tickARFrame()
         }
         startTimer(0.01, queue: imuQueue, strict: true, leeway: .milliseconds(1)) { [weak self] in
@@ -265,12 +268,17 @@ final class SimulatedDevice: @unchecked Sendable {
         frameIndex += 1
         let stampNs = nowStamp()
         let names = FrameNames(deviceName: rates.name)
-        let poseDiv = FrameDecimator.divisor(rateLimitHz: rates.pose, thermal: .nominal)
-        let colorDiv = FrameDecimator.divisor(rateLimitHz: rates.color, thermal: .nominal)
-        let depthDiv = FrameDecimator.divisor(rateLimitHz: rates.depth, thermal: .nominal)
+        // タイマーの揺れでレートがぶれないよう、フレームの時刻は通し番号から作る
+        let due = schedule.next(
+            timestamp: Double(index) / Self.arframeFps,
+            poseHz: rates.pose,
+            colorHz: rates.color,
+            depthHz: rates.depth,
+            thermal: .nominal
+        )
         var items: [(String, Data)] = []
 
-        let poseDue = FrameDecimator.shouldSend(frameIndex: index, divisor: poseDiv)
+        let poseDue = due.pose
         let pose = PoseInput(
             cameraTransform: cameraOnCircle(frameIndex: index),
             state: trackingState,
@@ -295,10 +303,10 @@ final class SimulatedDevice: @unchecked Sendable {
             items.append(("tf", encodeCDR(message)))
         }
 
-        if FrameDecimator.shouldSend(frameIndex: index, divisor: colorDiv) {
+        if due.color {
             scheduleColor(stampNs: stampNs, names: names, rates: rates, frameIndex: index)
         }
-        if FrameDecimator.shouldSend(frameIndex: index, divisor: depthDiv) {
+        if due.depth {
             appendDepth(stampNs: stampNs, names: names, frameIndex: index, items: &items)
         }
         guard !items.isEmpty else { return }

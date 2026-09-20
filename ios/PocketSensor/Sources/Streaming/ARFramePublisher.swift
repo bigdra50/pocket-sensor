@@ -8,6 +8,8 @@ import PocketSensorServer
 final class ARFramePublisher: @unchecked Sendable {
     private let runtime: StreamingRuntime
     private var gate = AnchorGate()
+    /// ARKit の delegate queue からだけ触る
+    private var schedule = FrameSchedule()
     private let gateLock = NSLock()
 
     init(runtime: StreamingRuntime) {
@@ -42,13 +44,16 @@ final class ARFramePublisher: @unchecked Sendable {
         let rates = runtime.rates()
         let stampNs = runtime.anchor.wireTime(sensorSeconds: sample.timestamp)
         let names = FrameNames(deviceName: rates.name)
-        let index = sample.index &- 1
-        let poseDiv = FrameDecimator.divisor(rateLimitHz: rates.pose, thermal: rates.thermal)
-        let colorDiv = FrameDecimator.divisor(rateLimitHz: rates.color, thermal: rates.thermal)
-        let depthDiv = FrameDecimator.divisor(rateLimitHz: rates.depth, thermal: rates.thermal)
-        let poseDue = FrameDecimator.shouldSend(frameIndex: index, divisor: poseDiv)
-        let colorDue = FrameDecimator.shouldSend(frameIndex: index, divisor: colorDiv)
-        let depthDue = FrameDecimator.shouldSend(frameIndex: index, divisor: depthDiv)
+        let due = schedule.next(
+            timestamp: sample.timestamp,
+            poseHz: rates.pose,
+            colorHz: rates.color,
+            depthHz: rates.depth,
+            thermal: rates.thermal
+        )
+        let poseDue = due.pose
+        let colorDue = due.color
+        let depthDue = due.depth
         let trackingAvailable = mapped.state != .notAvailable
         let pose = PoseInput(
             cameraTransform: StreamingMap.poseMatrix(sample.cameraTransform),

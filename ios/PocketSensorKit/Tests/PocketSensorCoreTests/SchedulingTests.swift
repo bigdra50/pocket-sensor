@@ -10,27 +10,6 @@ final class SchedulingTests: XCTestCase {
         XCTAssertEqual(ThermalLevel.critical.rateDivisor, 6)
     }
 
-    func testFrameDecimatorKeepsSlowerAsSubset() {
-        let pose = FrameDecimator.divisor(rateLimitHz: 30, thermal: .nominal)
-        let color = FrameDecimator.divisor(rateLimitHz: 15, thermal: .nominal)
-        XCTAssertEqual(pose, 2)
-        XCTAssertEqual(color, 4)
-        var poseSent: [UInt64] = []
-        var colorSent: [UInt64] = []
-        for i in UInt64(0) ..< 12 {
-            if FrameDecimator.shouldSend(frameIndex: i, divisor: pose) { poseSent.append(i) }
-            if FrameDecimator.shouldSend(frameIndex: i, divisor: color) { colorSent.append(i) }
-        }
-        XCTAssertEqual(poseSent, [0, 2, 4, 6, 8, 10])
-        XCTAssertEqual(colorSent, [0, 4, 8])
-        XCTAssertTrue(Set(colorSent).isSubset(of: Set(poseSent)))
-    }
-
-    func testThermalScalesDivisor() {
-        XCTAssertEqual(FrameDecimator.divisor(rateLimitHz: 30, thermal: .serious), 4)
-        XCTAssertEqual(FrameDecimator.divisor(rateLimitHz: 30, thermal: .critical), 12)
-    }
-
     func testRateMeterTwoSecondWindow() {
         var meter = RateMeter()
         for i in 0 ..< 60 {
