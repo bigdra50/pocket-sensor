@@ -180,9 +180,21 @@ Ouster の `SensorInfo` と同じ役割を持つ。
 | `name` | 端末の名前。トピック名と frame 名の前に付く |
 | `model`、`os_version`、`app_version` | 機種の識別子、iOS の版、アプリの版 |
 | `mode` | カメラのモード。最初は `arkit` だけ |
-| `streams` | チャンネルごとの解像度、符号化、レートの設定値 |
+| `streams` | 広告している全チャンネル。キーはチャンネルの表（`contract/channels.toml`）の key |
 | `clock` | 時計の種類と、壁時計へ固定したときの差。[time.md](time.md) を参照 |
 | `frames` | frame 名の一覧と、固定の変換 |
+
+`streams` の値は、`topic` と `schema` を必ず持つ。
+画像のチャンネルは `width`、`height`、`encoding` を持ち、レートの決まっているチャンネルは `rate`（Hz）を持つ。
+受け手は、端末が何を出せるかを、開く前にこの一覧で知る。
+
+`clock` は `kind`（時計の種類）、`anchor_ns`、`anchored_at_wall_ns`、`self_check` を持つ。
+
+`frames` は、frame 名を `odom`、`link`、`color_optical`、`imu_link` のキーで持つ。
+固定の変換は `static_transforms` の配列で、1 つが `parent`、`child`、`translation`、`rotation_xyzw`、`calibrated` を持つ。
+中身は `/tf_static` と同じで、`calibrated` だけがここにしか無い。
+`calibrated` が false の変換は、回転は正しいが、並進を測っていない（0 を入れてある）。
+IMU への変換がこれに当たる。
 
 ### diagnostics の中身
 

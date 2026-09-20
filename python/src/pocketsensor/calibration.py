@@ -19,9 +19,9 @@ _STREAM_FRAME_KEY: dict[Stream, str] = {
     Stream.DEPTH: "color_optical",
     Stream.CONFIDENCE: "color_optical",
     Stream.POSE: "link",
-    Stream.IMU: "imu",
-    Stream.IMU_RAW: "imu",
-    Stream.MAG: "imu",
+    Stream.IMU: "imu_link",
+    Stream.IMU_RAW: "imu_link",
+    Stream.MAG: "imu_link",
     Stream.PRESSURE: "link",
     Stream.GNSS: "link",
     Stream.BATTERY: "link",
@@ -59,14 +59,23 @@ class Calibration:
         # parent -> child の辺。p_parent = T @ p_child
         self._edges: dict[tuple[str, str], tuple[NDArray[np.float64], bool]] = {}
         self._frames: set[str] = set()
+        calibrated = self._calibrated_flags(device_info)
         for item in self._tf_static:
             parent = str(item["parent"])
             child = str(item["child"])
-            known = bool(item.get("translation_known", True))
+            # 並進が較正済みかどうかは、端末が device_info で知らせる。知らせが無い変換は較正済みとして扱う。
+            known = calibrated.get((parent, child), True)
             t = _make_t(item["rotation_xyzw"], item["translation"])
             self._edges[(parent, child)] = (t, known)
             self._frames.add(parent)
             self._frames.add(child)
+
+    @staticmethod
+    def _calibrated_flags(device_info: DeviceInfo) -> dict[tuple[str, str], bool]:
+        flags: dict[tuple[str, str], bool] = {}
+        for item in device_info.frames.get("static_transforms") or []:
+            flags[(str(item["parent"]), str(item["child"]))] = bool(item.get("calibrated", True))
+        return flags
 
     @property
     def raw(self) -> dict:

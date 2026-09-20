@@ -174,7 +174,8 @@ anchor はフレームの組へ入れない。
 
 外部パラメータを `extrinsics(source, target)` の形で引くのは、RealSense、Azure Kinect、Orbbec に共通する作法である。
 歪みは、モデル名と固定長の係数で表す。
-値が分からない項目（IMU のノイズ密度、カメラと IMU のあいだの並進）は、0 ではなく NaN を返す。
+端末が測っていない並進（カメラと IMU のあいだ）は、0 ではなく NaN で返す。
+測っていないことは、端末が `device_info` の `calibrated` で知らせる。
 ZED の `SensorParameters` が同じ扱いをしている。
 
 内部パラメータはフレームごとに変わりうるので、`frames.color.intrinsics` がそのフレームの値を持つ。

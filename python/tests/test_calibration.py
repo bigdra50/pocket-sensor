@@ -23,7 +23,7 @@ def _T(rpy: tuple[float, float, float], translation: tuple[float, float, float])
     return t
 
 
-def _info() -> DeviceInfo:
+def _info(imu_calibrated: bool = False) -> DeviceInfo:
     raw = {
         "schema_version": 1,
         "session_id": "s",
@@ -34,14 +34,29 @@ def _info() -> DeviceInfo:
         "mode": "arkit",
         "streams": {},
         "clock": {},
+        # アプリが送る形（PocketSensorCore の DeviceFrames）と同じキーにする。
         "frames": {
+            "odom": "pocketsensor_odom",
             "link": "pocketsensor_link",
             "color_optical": "pocketsensor_color_optical_frame",
-            "imu": "pocketsensor_imu_link",
-            "odom": "pocketsensor_odom",
+            "imu_link": "pocketsensor_imu_link",
+            "static_transforms": [
+                {
+                    "parent": "pocketsensor_link",
+                    "child": "pocketsensor_color_optical_frame",
+                    "translation": [0, 0, 0],
+                    "rotation_xyzw": [-0.5, 0.5, -0.5, 0.5],
+                    "calibrated": True,
+                },
+                {
+                    "parent": "pocketsensor_link",
+                    "child": "pocketsensor_imu_link",
+                    "translation": [0, 0, 0],
+                    "rotation_xyzw": [0, -0.7071067811865476, 0, 0.7071067811865476],
+                    "calibrated": imu_calibrated,
+                },
+            ],
         },
-        "imu": {"noise_density": float("nan")},
-        "camera_imu_translation_m": [float("nan"), float("nan"), float("nan")],
     }
     return DeviceInfo(
         schema_version=1,
@@ -67,14 +82,12 @@ def _static_tf() -> list[dict[str, object]]:
             "child": "pocketsensor_color_optical_frame",
             "translation": (0.0, 0.0, 0.0),
             "rotation_xyzw": tuple(float(v) for v in q_color),
-            "translation_known": True,
         },
         {
             "parent": "pocketsensor_link",
             "child": "pocketsensor_imu_link",
             "translation": (0.0, 0.0, 0.0),
             "rotation_xyzw": tuple(float(v) for v in q_imu),
-            "translation_known": False,
         },
     ]
 
@@ -134,8 +147,22 @@ def test_unknown_frame_raises_unsupported() -> None:
         cal.extrinsics("nope", "pocketsensor_link")
 
 
-def test_raw_exposes_device_info_and_nans() -> None:
+def test_raw_exposes_device_info() -> None:
     cal = Calibration(_info(), _static_tf(), {})
     assert cal.raw["name"] == "pocketsensor"
-    assert np.isnan(cal.raw["imu"]["noise_density"])
-    assert all(np.isnan(v) for v in cal.raw["camera_imu_translation_m"])
+    assert cal.raw["frames"]["imu_link"] == "pocketsensor_imu_link"
+
+
+def test_imu_stream_maps_to_the_imu_link_frame() -> None:
+    cal = Calibration(_info(), _static_tf(), {})
+    t_stream = cal.extrinsics(Stream.POSE, Stream.IMU)
+    t_named = cal.extrinsics("pocketsensor_link", "pocketsensor_imu_link")
+    np.testing.assert_allclose(t_stream, t_named, equal_nan=True)
+
+
+def test_uncalibrated_translation_follows_the_flag_in_device_info() -> None:
+    # 並進が未較正かどうかは、端末が device_info で知らせる。frame 名から推測しない。
+    unknown = Calibration(_info(imu_calibrated=False), _static_tf(), {})
+    assert np.isnan(unknown.extrinsics(Stream.POSE, Stream.IMU)[:3, 3]).all()
+    known = Calibration(_info(imu_calibrated=True), _static_tf(), {})
+    np.testing.assert_allclose(known.extrinsics(Stream.POSE, Stream.IMU)[:3, 3], [0.0, 0.0, 0.0], atol=1e-12)

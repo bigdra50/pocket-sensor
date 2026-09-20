@@ -219,7 +219,7 @@ def test_stats_count_drops_when_consumer_is_slow() -> None:
             assert dev.stats.dropped_framesets > 0
             frames = dev.wait_for_frames(timeout=2.0)
             assert frames.t_device_ns > 0
-            assert np.isnan(dev.calibration.raw["imu"]["noise_density"])
+            assert np.isnan(dev.calibration.extrinsics(Stream.POSE, Stream.IMU)[:3, 3]).all()
 
 
 def test_default_depth_uses_compressed_when_advertised() -> None:

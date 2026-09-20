@@ -850,6 +850,29 @@ class FakeDevice:
         )
         return self._codec.encode("tf2_msgs/msg/TFMessage", msg)
 
+    def _device_streams(self, color_width: int, color_height: int) -> dict[str, dict[str, Any]]:
+        images = {
+            "color_image": (color_width, color_height, "jpeg"),
+            "depth_image": (256, 192, "16UC1"),
+            "depth_confidence": (256, 192, "mono8"),
+            "depth_image_compressed": (256, 192, "16UC1; compressedDepth png"),
+            "depth_confidence_compressed": (256, 192, "mono8; png compressed "),
+        }
+        streams: dict[str, dict[str, Any]] = {}
+        for row in CHANNELS:
+            key = str(row["key"])
+            if key not in self._by_key:
+                continue
+            entry: dict[str, Any] = {"topic": self._by_key[key].topic, "schema": str(row["schema"])}
+            if key in images:
+                entry["width"], entry["height"], entry["encoding"] = images[key]
+            rate_param = row.get("rate_param")
+            rate = self._params.get(str(rate_param)) if rate_param else row.get("rate_hz")
+            if rate is not None:
+                entry["rate"] = rate
+            streams[key] = entry
+        return streams
+
     def _encode_device_info(self, t_wire: int) -> bytes:
         width, height = self._color_size()
         payload = {
@@ -860,35 +883,36 @@ class FakeDevice:
             "os_version": "iOS-fake",
             "app_version": "0.1.0",
             "mode": "arkit",
-            "streams": {
-                "color": {
-                    "width": width,
-                    "height": height,
-                    "encoding": "jpeg",
-                    "rate": self._params["color.rate"],
-                },
-                "depth": {
-                    "width": 256,
-                    "height": 192,
-                    "encoding": "16UC1",
-                    "rate": self._params["depth.rate"],
-                },
-                "pose": {"rate": self._params["pose.rate"]},
-                "imu": {"rate": self._params["imu.rate"]},
-            },
+            "streams": self._device_streams(width, height),
+            # キーは、アプリ（PocketSensorCore の DeviceInfo）が送るものと同じにする。
             "clock": {
-                "domain": "mach_absolute_time",
+                "kind": "mach_absolute_time",
                 "anchor_ns": int(self._start_wall - self._start_mono),
-                "anchor_wall_ns": int(self._start_wall),
+                "anchored_at_wall_ns": int(self._start_wall),
+                "self_check": "ok",
             },
             "frames": {
+                "odom": f"{self.name}_odom",
                 "link": f"{self.name}_link",
                 "color_optical": f"{self.name}_color_optical_frame",
-                "imu": f"{self.name}_imu_link",
-                "odom": f"{self.name}_odom",
+                "imu_link": f"{self.name}_imu_link",
+                "static_transforms": [
+                    {
+                        "parent": f"{self.name}_link",
+                        "child": f"{self.name}_color_optical_frame",
+                        "translation": [0.0, 0.0, 0.0],
+                        "rotation_xyzw": [float(v) for v in rpy_to_quaternion(*LINK_TO_COLOR_OPTICAL_RPY)],
+                        "calibrated": True,
+                    },
+                    {
+                        "parent": f"{self.name}_link",
+                        "child": f"{self.name}_imu_link",
+                        "translation": [0.0, 0.0, 0.0],
+                        "rotation_xyzw": [float(v) for v in rpy_to_quaternion(*LINK_TO_IMU_RPY)],
+                        "calibrated": False,
+                    },
+                ],
             },
-            "imu": {"noise_density": float("nan")},
-            "camera_imu_translation_m": [float("nan"), float("nan"), float("nan")],
         }
         msg = self._codec.make(
             "std_msgs/msg/String",

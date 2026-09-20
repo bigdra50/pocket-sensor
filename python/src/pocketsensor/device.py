@@ -520,7 +520,6 @@ class Device:
                             float(tf.transform.rotation.z),
                             float(tf.transform.rotation.w),
                         ),
-                        "translation_known": not child.endswith("_imu_link"),
                     }
                 )
             with self._lock:
