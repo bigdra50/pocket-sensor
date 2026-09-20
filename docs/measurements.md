@@ -257,10 +257,49 @@ USB では、無圧縮でも PNG でも結果が変わらなかった。
 `header.stamp` は、センサーの時計の値を `anchor` で壁時計へ写したものである。
 独立に得た 2 つの時刻が合っているので、`anchor` の計算が正しいことの裏付けになる。
 
+## Lichtblick の画面での表示
+
+Lichtblick の Web 版（Docker の `ghcr.io/lichtblick-suite/lichtblick`）を Chrome で開き、接続の種類に Foxglove WebSocket を選んで、擬似デバイスと実機の両方へ直接つないだ。
+
+| パネル | 結果 |
+| --- | --- |
+| トピックの一覧 | 全チャンネルが、スキーマの名前と一緒に並んだ |
+| 3D | `/tf` と `/tf_static` から、`odom`、`link`、光学 frame、IMU、anchor の木が描かれた |
+| Image（`color/image/compressed`） | JPEG が表示された。実機では、カメラの映像がそのまま出た |
+| Image（`depth/image`） | `16UC1` の深度として認識され、値の範囲を指定すると濃淡で表示された。較正には `depth/camera_info` が自動で選ばれた |
+| Image（`depth/confidence/compressed`） | PNG が復号された。値が 0 から 2 なので、見た目はほぼ黒い |
+| Image（`depth/image/compressedDepth`） | 復号できなかった（`Error decoding image`）。先頭の 12 バイトのヘッダを、Lichtblick は読み飛ばさない |
+| Raw Messages（`imu/data`） | `linear_acceleration.z` が 9.80665 と表示された |
+
+アラートは 2 種類出たが、どちらも案内で、復号の失敗ではなかった。
+60 Hz を超えるトピックがあること（IMU の 100 Hz）と、TF の先読みの設定を勧めるものである。
+
+## ROS 2 の上での確認
+
+ROS 2 Jazzy のコンテナの中で中継をビルドして動かし、`ros2/docker/` のスクリプトで確かめた。
+相手は、擬似デバイスと実機（WiFi）の両方である。
+
+| 確かめたこと | 結果 |
+| --- | --- |
+| `colcon build` | `pocketsensor_msgs` と `pocketsensor_ros` がビルドできた |
+| xacro | マクロを展開した URDF を `check_urdf` が読み、`base_link` の下に 3 つの link が並んだ |
+| トピックの型とレート | rclpy のノードで、標準の型と `TrackingStatus` を受け取れた。擬似デバイスでは、姿勢 29.8 Hz、IMU 98 Hz、深度 14.7 Hz |
+| `header.stamp` | ROS の時計との差は、擬似デバイスで 1 ms から 25 ms、実機の WiFi で 45 ms から 220 ms（計測から届くまでの遅延に当たる） |
+| TF | `odom` から `link`、`link` から光学 frame と IMU、`odom` から anchor が引けた。`publish_tf:=false` では `link` から anchor だけが出た |
+| 深度の PNG | `image_transport` の `republish` が、`compressedDepth` を `16UC1` の 256×192 へ、`compressed` を `mono8` へ戻した |
+| rosbag2 | SDK が実機から記録した MCAP を `ros2 bag info` が読み、`ros2 bag play` の再生を `ros2 topic echo` で受け取れた |
+
+実際に動かして、不具合が 3 つ見つかった。
+
+- `package.xml` の保守者のメールアドレスを catkin の検証が不正と判定し、ビルドが止まる
+- 終了のシグナルを受けた中継が、例外を出して終わる
+- 記録の先頭に、セッションの開始からの無音ができる
+
+3 つ目は、アプリを起動して 4 分後に 3 秒だけ記録した bag の長さが 278 秒になる、という形で現れた。
+
 ## 測っていないもの
 
 - 端末を動かしたときの `odom` の軸の向き（前へ動かして x が増えるか）
 - 端末を回したときの `imu/data` の yaw の符号
 - 深度を RGB へ重ねたときの、輪郭の一致
-- Lichtblick と Foxglove の画面での表示。両者が使うクライアントでの復号までは確かめた
 - 参照画像の anchor。軸の向きは ARKit の定義から導いたもので、実機では見ていない

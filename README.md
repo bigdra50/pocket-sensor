@@ -19,7 +19,7 @@ iPhone の RGB、LiDAR 深度、ARKit の自己位置、IMU、GNSS、地磁気�
 | --- | --- |
 | iOS アプリ | iPhone 16 Pro で動作を確認した |
 | Python SDK（接続、フレームの組、IMU、較正、時計合わせ、記録と再生、コマンド） | 実機（WiFi と USB）と擬似デバイスで確認した |
-| Lichtblick と Foxglove からの接続 | 両者が内部で使うクライアントと復号器で、全チャンネルの復号を確認した。画面での表示は確かめていない |
+| Lichtblick からの接続 | 実機へ直接つなぎ、TF、RGB、深度、IMU の表示を確認した。`compressedDepth` だけは Lichtblick が復号できないので、表示には無圧縮の深度を使う |
 | USB での接続 | 実機で確認した。破棄は 0 で、遅延の中央値は約 60 ms |
 | ROS 2 の中継 | ROS 2 Jazzy のコンテナで、ビルド、実行、`image_transport` での深度の復号、rosbag2 での再生を確認した |
 | 参照画像の anchor | 擬似デバイスでは確認した。実機では、参照画像を登録して映す確認をしていない |
