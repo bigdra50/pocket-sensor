@@ -66,6 +66,17 @@ run = [
   "uv run ruff format --check . ../ros2 ../examples",
 ]
 
+[tasks."view:lichtblick"]
+description = "Lichtblick の Web 版を Docker で立て、3D、RGB、深度を並べたレイアウトで開く URL を出す。接続先は SOURCE、ポートは POCKETSENSOR_LICHTBLICK_PORT で変える"
+run = """
+PORT="${POCKETSENSOR_LICHTBLICK_PORT:-8080}"
+docker run --rm -d --name pocketsensor-lichtblick -p "$PORT:8080" \
+  -v "{{config_root}}/examples/lichtblick-layout.json:/src/pocketsensor-layout.json:ro" \
+  ghcr.io/lichtblick-suite/lichtblick >/dev/null
+echo "http://localhost:$PORT/?ds=foxglove-websocket&ds.url=${SOURCE:-ws://iphone.local:8765}&layoutUrl=http://localhost:$PORT/pocketsensor-layout.json"
+echo "止めるときは docker rm -f pocketsensor-lichtblick"
+"""
+
 [tasks.sim]
 description = "擬似デバイスを 8765 番で起動する（Ctrl-C で止める）"
 dir = "{{config_root}}/ios/PocketSensorKit"

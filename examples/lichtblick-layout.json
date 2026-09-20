@@ -1,0 +1,71 @@
+{
+  "configById": {
+    "3D!pocketsensor": {
+      "followTf": "pocketsensor_odom",
+      "followMode": "follow-none",
+      "scene": {
+        "transforms": { "labelSize": 0.04, "axisScale": 0.3 }
+      },
+      "cameraState": {
+        "distance": 3,
+        "perspective": true,
+        "phi": 60,
+        "thetaOffset": 45,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "layers": {
+        "grid": {
+          "layerId": "foxglove.Grid",
+          "instanceId": "grid",
+          "label": "Grid",
+          "visible": true,
+          "frameLocked": true,
+          "size": 10,
+          "divisions": 10,
+          "lineWidth": 1,
+          "color": "#248eff",
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0],
+          "order": 1
+        }
+      },
+      "transforms": {},
+      "topics": {}
+    },
+    "Image!color": {
+      "imageMode": {
+        "imageTopic": "/pocketsensor/color/image/compressed",
+        "calibrationTopic": "/pocketsensor/color/camera_info"
+      }
+    },
+    "Image!depth": {
+      "imageMode": {
+        "imageTopic": "/pocketsensor/depth/image",
+        "calibrationTopic": "/pocketsensor/depth/camera_info",
+        "colorMode": "colormap",
+        "colorMap": "turbo",
+        "minValue": 0,
+        "maxValue": 4000
+      }
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": { "speed": 1 },
+  "layout": {
+    "direction": "row",
+    "first": "3D!pocketsensor",
+    "second": {
+      "direction": "column",
+      "first": "Image!color",
+      "second": "Image!depth",
+      "splitPercentage": 50
+    },
+    "splitPercentage": 60
+  }
+}

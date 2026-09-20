@@ -83,7 +83,7 @@ with ps.open("ws://iphone.local:8765", config) as dev:    # "usb:" も "run.mcap
 
 | やりたいこと | 見るもの |
 | --- | --- |
-| Lichtblick や Foxglove で表示する | 接続の種類に Foxglove WebSocket を選び、`ws://iphone.local:8765` を開く |
+| Lichtblick や Foxglove で表示する | 接続の種類に Foxglove WebSocket を選び、`ws://iphone.local:8765` を開く。`mise run view:lichtblick` は、3D、RGB、深度を並べたレイアウトで開く URL を出す（[examples/](examples/README.md)） |
 | OpenCV や Rerun で表示する | [examples/](examples/README.md) |
 | ROS 2 のトピックへ流す | [ros2/pocketsensor_ros/](ros2/pocketsensor_ros/README.md) |
 | 取り付けたあとに軸の向きを確かめる | `pocketsensor check-axes usb:` の指示に従って端末を動かす |
@@ -104,6 +104,7 @@ uv、Swift、XcodeGen は、PATH にあるものを使う。
 | `mise run test:e2e` | Swift の擬似デバイスと Python SDK を通しで確かめる |
 | `mise run test:foxglove-client` | Lichtblick と同じクライアントと復号器でサーバーを確かめる（node が要る） |
 | `mise run test:ros2` | ROS 2 のコンテナの中で、中継、`image_transport`、TF、rosbag2 を確かめる（Docker が要る） |
+| `mise run view:lichtblick` | Lichtblick の Web 版を Docker で立て、用意したレイアウトで開く URL を出す |
 | `mise run lint:python` | ruff の検査 |
 | `mise run gen` | `contract/` から Swift と Python の生成物を作り直す |
 
