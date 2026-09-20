@@ -83,7 +83,11 @@ def test_record_writes_cdr_ros2msg_and_metadata(tmp_path: Path) -> None:
         assert schema.data
         assert channel.message_encoding == "cdr"
         assert channel.metadata == {}
-        assert message.log_time == message.publish_time
+        if channel.topic == "/tf_static" or channel.topic.endswith("/device_info"):
+            # 記録の開始時に持っていた分は、最初に届いたメッセージの時刻で書く。元の時刻は publish_time。
+            assert message.log_time >= message.publish_time
+        else:
+            assert message.log_time == message.publish_time
         assert message.log_time > 0
 
     assert "std_msgs/msg/String" in schemas_by_name
@@ -160,3 +164,27 @@ def test_record_decodes_with_mcap_ros2_support_when_installed(tmp_path: Path) ->
     assert decoded
     for item in decoded:
         assert item.ros_msg is not None
+
+
+def test_latched_messages_do_not_stretch_the_timeline_of_a_late_recording(tmp_path: Path) -> None:
+    # /tf_static と device_info の時刻は、セッションの開始時のもの。そのまま log_time にすると、
+    # 記録の先頭に長い無音ができ、rosbag2 や Lichtblick での再生がそのあいだ待たされる。
+    path = tmp_path / "late.mcap"
+    with FakeDevice(port=0, seed=0) as fake:
+        with ps.open(fake.url, _cfg()) as dev:
+            time.sleep(3.0)
+            with dev.record(path):
+                time.sleep(0.5)
+    latched: dict[str, tuple[int, int]] = {}
+    log_times: list[int] = []
+    with path.open("rb") as handle:
+        for _schema, channel, message in make_reader(handle).iter_messages():
+            log_times.append(message.log_time)
+            if channel.topic in ("/tf_static", "/pocketsensor/device_info"):
+                latched[channel.topic] = (message.log_time, message.publish_time)
+    assert set(latched) == {"/tf_static", "/pocketsensor/device_info"}
+    # 記録は 0.5 秒。開始までの 3 秒が時間軸へ入っていなければよい（負荷で記録が延びても 2 秒は超えない）。
+    assert (max(log_times) - min(log_times)) / 1e9 < 2.0
+    for log_time, publish_time in latched.values():
+        # 元の時刻は publish_time に残す。
+        assert (log_time - publish_time) / 1e9 > 2.5

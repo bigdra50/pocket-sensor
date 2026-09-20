@@ -46,6 +46,7 @@ class Recorder:
         self._schema_ids: dict[str, int] = {}
         self._channel_ids: dict[str, int] = {}
         self._seq: dict[str, int] = {}
+        self._pending_latched: list[tuple[ChannelInfo, int, bytes]] = []
 
     def __enter__(self) -> Recorder:
         self.start()
@@ -68,7 +69,7 @@ class Recorder:
         with self._device._lock:
             latched = list(self._device._latched_raw.values())
         for channel, t_ns, payload in latched:
-            self._enqueue(channel, t_ns, payload)
+            self._enqueue(channel, t_ns, payload, kind="latched")
         self._device.add_raw_tap(self._on_raw)
 
     def stop(self) -> None:
@@ -102,9 +103,9 @@ class Recorder:
     def _on_raw(self, channel: ChannelInfo, t_ns: int, payload: bytes) -> None:
         self._enqueue(channel, t_ns, payload)
 
-    def _enqueue(self, channel: ChannelInfo, t_ns: int, payload: bytes) -> None:
+    def _enqueue(self, channel: ChannelInfo, t_ns: int, payload: bytes, kind: str = "msg") -> None:
         try:
-            self._queue.put_nowait(("msg", channel, int(t_ns), bytes(payload)))
+            self._queue.put_nowait((kind, channel, int(t_ns), bytes(payload)))
         except queue.Full:
             self._device._note_record_drop()
             if not self._overflow_logged:
@@ -117,6 +118,7 @@ class Recorder:
                 item = self._queue.get(timeout=0.2)
             except queue.Empty:
                 if self._stopped:
+                    self._flush_latched(log_time_ns=None)
                     return
                 continue
             if item is _STOP:
@@ -129,21 +131,48 @@ class Recorder:
             try:
                 item = self._queue.get_nowait()
             except queue.Empty:
-                return
+                break
             if item is _STOP:
                 continue
             self._write_item(item)
+        # 記録のあいだに 1 件も届かなかった。合わせる時刻が無いので、元の時刻で書く。
+        self._flush_latched(log_time_ns=None)
 
     def _write_item(self, item: object) -> None:
         kind, channel, t_ns, payload = item  # type: ignore[misc]
-        if kind != "msg" or self._writer is None:
+        if self._writer is None:
             return
+        if kind == "latched":
+            self._pending_latched.append((channel, t_ns, payload))
+            return
+        if kind != "msg":
+            return
+        self._flush_latched(log_time_ns=t_ns)
         try:
-            self._write_message(channel, t_ns, payload)
+            self._write_message(channel, t_ns, payload, publish_time_ns=t_ns)
         except Exception:
             log.exception("failed to write MCAP message on %s", channel.topic)
 
-    def _write_message(self, channel: ChannelInfo, t_ns: int, payload: bytes) -> None:
+    def _flush_latched(self, log_time_ns: int | None) -> None:
+        """記録の開始時に持っていた /tf_static と device_info を、最初に届いたメッセージの時刻で書く。
+
+        これらの時刻はセッションの開始時のもので、そのまま log_time にすると記録の先頭に長い無音ができる。
+        rosbag2 や Lichtblick は log_time の順に再生するので、そのあいだ待たされる。
+        元の時刻は publish_time に残す。
+        """
+        pending, self._pending_latched = self._pending_latched, []
+        for channel, t_ns, payload in pending:
+            try:
+                self._write_message(
+                    channel,
+                    t_ns if log_time_ns is None else max(t_ns, log_time_ns),
+                    payload,
+                    publish_time_ns=t_ns,
+                )
+            except Exception:
+                log.exception("failed to write MCAP message on %s", channel.topic)
+
+    def _write_message(self, channel: ChannelInfo, t_ns: int, payload: bytes, publish_time_ns: int) -> None:
         writer = self._writer
         assert writer is not None
         schema_id = self._schema_ids.get(channel.schema_name)
@@ -160,7 +189,7 @@ class Recorder:
             self._channel_ids[channel.topic] = channel_id
         seq = self._seq.get(channel.topic, 0)
         self._seq[channel.topic] = seq + 1
-        writer.add_message(channel_id, t_ns, payload, t_ns, sequence=seq)
+        writer.add_message(channel_id, t_ns, payload, publish_time_ns, sequence=seq)
 
     def _write_metadata(self) -> None:
         writer = self._writer
