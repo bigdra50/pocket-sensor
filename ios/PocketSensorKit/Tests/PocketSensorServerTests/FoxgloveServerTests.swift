@@ -306,6 +306,61 @@ final class FoxgloveServerTests: XCTestCase {
         XCTAssertEqual(client.pendingBinaryCount, 0)
     }
 
+    func testListenerRecoversAfterItFailed() throws {
+        // 同じポートを先に使っているサーバーがあると、あとから始めた待ち受けは失敗する。
+        // ネットワークの切り替えで待ち受けが落ちたときと同じ経路で、張り直して復帰することを確かめる。
+        let port = startServer()
+        let late = makeServer(port: port)
+        defer { late.stop() }
+        let failed = expectation(description: "second listener fails while the port is busy")
+        failed.assertForOverFulfill = false
+        let recovered = expectation(description: "second listener becomes ready after the port is free")
+        recovered.assertForOverFulfill = false
+        late.onStateChange = { state in
+            if state.hasPrefix("failed") { failed.fulfill() }
+            if state == "ready" { recovered.fulfill() }
+        }
+        late.start()
+        waitCompleted(failed)
+
+        server?.stop()
+        server = nil
+        waitCompleted(recovered, timeout: 10)
+        XCTAssertEqual(late.actualPort, port)
+        let client = connect(port: port)
+        XCTAssertNotNil(client.waitOpen())
+    }
+
+    func testStoppedServerDoesNotComeBack() {
+        let port = startServer()
+        let late = makeServer(port: port)
+        let failed = expectation(description: "second listener fails while the port is busy")
+        failed.assertForOverFulfill = false
+        let ready = expectation(description: "a stopped server must stay stopped")
+        ready.isInverted = true
+        late.onStateChange = { state in
+            if state.hasPrefix("failed") { failed.fulfill() }
+            if state == "ready" { ready.fulfill() }
+        }
+        late.start()
+        waitCompleted(failed)
+        late.stop()
+        server?.stop()
+        server = nil
+        waitCompleted(ready, timeout: 2)
+    }
+
+    private func makeServer(port: UInt16) -> FoxgloveServer {
+        let mono = Int64(bitPattern: DispatchTime.now().uptimeNanoseconds)
+        let wall = Int64((Date().timeIntervalSince1970 * 1_000_000_000).rounded())
+        return FoxgloveServer(
+            config: ServerConfig(port: port, deviceName: "pocketsensor", sessionId: "late", advertiseBonjour: false),
+            parameters: ParameterStore(specs: Contract.parameters),
+            anchor: ClockAnchor(wallNs: wall, monoNs: mono),
+            monoClockNs: { Int64(bitPattern: DispatchTime.now().uptimeNanoseconds) }
+        )
+    }
+
     private func startServer(sessionId: String = "test-session", deviceName: String = "pocketsensor") -> UInt16 {
         let mono = Int64(bitPattern: DispatchTime.now().uptimeNanoseconds)
         let wall = Int64((Date().timeIntervalSince1970 * 1_000_000_000).rounded())

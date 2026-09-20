@@ -54,6 +54,8 @@ public final class FoxgloveServer: @unchecked Sendable {
     private let queueKey = DispatchSpecificKey<UInt8>()
 
     private var listener: NWListener?
+    private var wantsRunning = false
+    private var backoff = RestartBackoff()
     private var _actualPort: UInt16?
     private var connections: [ObjectIdentifier: Client] = [:]
     private var subscriberCounts = SubscriberCounts()
@@ -125,11 +127,17 @@ public final class FoxgloveServer: @unchecked Sendable {
     }
 
     public func start() {
-        asyncOnQueue { self.startOnQueue() }
+        asyncOnQueue {
+            self.wantsRunning = true
+            self.startOnQueue()
+        }
     }
 
     public func stop() {
-        onQueue { self.stopOnQueue() }
+        onQueue {
+            self.wantsRunning = false
+            self.stopOnQueue()
+        }
     }
 
     public func hasSubscribers(_ channelKey: String) -> Bool {
@@ -201,6 +209,17 @@ public final class FoxgloveServer: @unchecked Sendable {
             self.listener = listener
         } catch {
             onStateChange?("failed: \(error)")
+            scheduleRestart()
+        }
+    }
+
+    /// 失敗した待ち受けは ready へ戻らない。USB の抜き差しや WiFi の切り替えで落ちたままにしないよう、作り直す。
+    private func scheduleRestart() {
+        guard wantsRunning else { return }
+        let delay = backoff.nextDelay()
+        queue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.wantsRunning, self.listener == nil else { return }
+            self.startOnQueue()
         }
     }
 
@@ -218,10 +237,20 @@ public final class FoxgloveServer: @unchecked Sendable {
     private func handleListenerState(_ state: NWListener.State) {
         switch state {
         case .ready:
+            backoff.reset()
             if let port = listener?.port {
                 _actualPort = port.rawValue
             }
             onStateChange?(describe(state))
+        case .failed:
+            onStateChange?(describe(state))
+            // つながっているクライアントは残し、待ち受けだけを作り直す。
+            // 捨てる待ち受けの cancelled が、作り直したあとの状態の表示を上書きしないように、先に通知を外す。
+            listener?.stateUpdateHandler = nil
+            listener?.cancel()
+            listener = nil
+            _actualPort = nil
+            scheduleRestart()
         default:
             onStateChange?(describe(state))
         }
