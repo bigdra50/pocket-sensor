@@ -247,8 +247,8 @@ xlerobot-book は、pocketsensor を利用する側として次のものを持�
 | 疑似 LaserScan と、その設定（行の範囲、取り付けの下向き角） | 引き継がない |
 | 走行の要約と、Record3D 経由の記録 | xlerobot-book に残す |
 
-xlerobot-book の実験は、pocketsensor が前身と同じ機能（姿勢、状態、時計合わせ、anchor）に届いた時点で切り替える。
-それまでは、前身のアプリをそのまま使う。
+xlerobot-book の実験は、iPhone の側に pocketsensor を使う。
+前身のアプリと wire の契約は xlerobot-book から除いてあり、ゲートの記録と解析（`navigate/gate`）は pocketsensor の SDK の上で動く。
 
 ## 実機で確かめること
 
