@@ -126,46 +126,16 @@ final class StatusPublisher: @unchecked Sendable {
         let colorH = colorSize?.height ?? Int(
             (Double(rates.colorSourceHeight) * Double(colorW) / Double(max(rates.colorSourceWidth, 1))).rounded()
         )
-        func topic(_ key: String) -> String {
-            names.topic(Contract.channels.first { $0.key == key }!)
-        }
-        return [
-            "odom": DeviceStream(topic: topic("odom"), schema: "nav_msgs/msg/Odometry", rate: rates.pose),
-            "tracking": DeviceStream(topic: topic("tracking"), schema: "pocketsensor_msgs/msg/TrackingStatus", rate: rates.pose),
-            "color_image": DeviceStream(
-                topic: topic("color_image"),
-                schema: "sensor_msgs/msg/CompressedImage",
-                width: colorW,
-                height: colorH,
-                encoding: "jpeg",
-                rate: rates.color
-            ),
-            "depth_image": DeviceStream(
-                topic: topic("depth_image"),
-                schema: "sensor_msgs/msg/Image",
-                width: rates.depthWidth,
-                height: rates.depthHeight,
-                encoding: "16UC1",
-                rate: rates.depth
-            ),
-            "depth_image_compressed": DeviceStream(
-                topic: topic("depth_image_compressed"),
-                schema: "sensor_msgs/msg/CompressedImage",
-                width: rates.depthWidth,
-                height: rates.depthHeight,
-                encoding: MessageBuilders.compressedDepthFormat,
-                rate: rates.depth
-            ),
-            "depth_confidence_compressed": DeviceStream(
-                topic: topic("depth_confidence_compressed"),
-                schema: "sensor_msgs/msg/CompressedImage",
-                width: rates.depthWidth,
-                height: rates.depthHeight,
-                encoding: MessageBuilders.compressedConfidenceFormat,
-                rate: rates.depth
-            ),
-            "imu": DeviceStream(topic: topic("imu"), schema: "sensor_msgs/msg/Imu", rate: rates.imu),
-        ]
+        return DeviceStream.all(
+            names: names,
+            settings: DeviceStreamSettings(
+                rates: ["pose.rate": rates.pose, "color.rate": rates.color, "depth.rate": rates.depth, "imu.rate": rates.imu],
+                colorWidth: colorW,
+                colorHeight: colorH,
+                depthWidth: rates.depthWidth,
+                depthHeight: rates.depthHeight
+            )
+        )
     }
 }
 

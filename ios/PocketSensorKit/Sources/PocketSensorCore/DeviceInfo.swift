@@ -96,6 +96,70 @@ public struct DeviceStream: Equatable, Sendable {
     }
 }
 
+/// `device_info` の streams を作るための、いまの設定値。
+public struct DeviceStreamSettings: Equatable, Sendable {
+    /// parameter の名前（`pose.rate` など）から Hz への対応。
+    public var rates: [String: Double]
+    public var colorWidth: Int
+    public var colorHeight: Int
+    public var depthWidth: Int
+    public var depthHeight: Int
+
+    public init(rates: [String: Double], colorWidth: Int, colorHeight: Int, depthWidth: Int, depthHeight: Int) {
+        self.rates = rates
+        self.colorWidth = colorWidth
+        self.colorHeight = colorHeight
+        self.depthWidth = depthWidth
+        self.depthHeight = depthHeight
+    }
+}
+
+public extension DeviceStream {
+    /// 広告する全チャンネルを、契約の表から作る。
+    ///
+    /// 受け手は、この一覧で端末が何を出せるかを開く前に知る。
+    /// 手で列挙すると、チャンネルを足したときに載せ忘れるので、契約から作る。
+    static func all(
+        names: FrameNames,
+        channels: [ChannelSpec] = Contract.channels,
+        settings: DeviceStreamSettings
+    ) -> [String: DeviceStream] {
+        var streams: [String: DeviceStream] = [:]
+        for channel in channels where channel.stage == 1 {
+            let image = imageDescription(key: channel.key, settings: settings)
+            streams[channel.key] = DeviceStream(
+                topic: names.topic(channel),
+                schema: channel.schema,
+                width: image?.width,
+                height: image?.height,
+                encoding: image?.encoding,
+                rate: channel.rateParam.flatMap { settings.rates[$0] } ?? channel.rateHz
+            )
+        }
+        return streams
+    }
+
+    private static func imageDescription(
+        key: String,
+        settings: DeviceStreamSettings
+    ) -> (width: Int, height: Int, encoding: String)? {
+        switch key {
+        case "color_image":
+            return (settings.colorWidth, settings.colorHeight, "jpeg")
+        case "depth_image":
+            return (settings.depthWidth, settings.depthHeight, "16UC1")
+        case "depth_confidence":
+            return (settings.depthWidth, settings.depthHeight, "mono8")
+        case "depth_image_compressed":
+            return (settings.depthWidth, settings.depthHeight, MessageBuilders.compressedDepthFormat)
+        case "depth_confidence_compressed":
+            return (settings.depthWidth, settings.depthHeight, MessageBuilders.compressedConfidenceFormat)
+        default:
+            return nil
+        }
+    }
+}
+
 public struct DeviceClock: Equatable, Sendable {
     public var kind: String
     public var anchorNs: Int64
