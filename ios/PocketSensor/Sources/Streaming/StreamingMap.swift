@@ -66,8 +66,7 @@ enum StreamingMap {
         }
     }
 
-    /// CMAttitude.quaternion は DEVICE 系のベクトルを基準系へ回す。逆は取らない。
-    /// 根拠: docs/measurements.md
+    /// CMAttitude.quaternion は DEVICE 系のベクトルを基準系へ回す。逆は取らない（実機で確かめた）。
     static func attitudeDeviceToReference(x: Double, y: Double, z: Double, w: Double) -> simd_quatd {
         simd_quatd(ix: x, iy: y, iz: z, r: w)
     }
