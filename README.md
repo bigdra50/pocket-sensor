@@ -113,7 +113,6 @@ Swift と Python のコードは、そこから生成する。
 
 | 内容 | 文書 |
 | --- | --- |
-| 何を作るか、なぜその形か | [docs/architecture.md](docs/architecture.md) |
 | 接続、チャンネル、設定、サービス | [docs/protocol.md](docs/protocol.md) |
 | 座標系と単位 | [docs/frames-and-units.md](docs/frames-and-units.md) |
 | 時刻と時計合わせ | [docs/time.md](docs/time.md) |
