@@ -1,8 +1,5 @@
 # Python SDK の API
 
-Python SDK は、iPhone を RGB-D カメラの SDK と同じ作法で開く。
-ROS 2 には依存しない。
-
 ## 使用例
 
 ```python
@@ -192,17 +189,3 @@ LiDAR の無い機種では、深度と confidence が一覧に現れない。
 
 `check-anchor` は、参照画像の置き方を `--pose` で受け取る。
 `vertical` は壁や画面、`horizontal` は机や床である。
-
-## 依存パッケージ
-
-| 用途 | パッケージ | 扱い |
-| --- | --- | --- |
-| WebSocket | `websockets` | 必須 |
-| 配列 | `numpy` | 必須 |
-| CDR のデコード | `rosbags`（Apache-2.0、純 Python） | 必須。ROS 2 のインストールは要らない |
-| MCAP | `mcap` | 必須 |
-| JPEG と PNG のデコード | `Pillow` | 必須。`simplejpeg` か `opencv-python` が入っていれば、JPEG のデコードにはそちらを先に使う |
-| Bonjour | `zeroconf`（LGPL-2.1-or-later） | 追加の依存（`pocketsensor[discovery]`） |
-| H.264 のデコード | `av` | 追加の依存（`pocketsensor[video]`） |
-
-usbmux のクライアントは、SDK の中に最小の実装を持つ。

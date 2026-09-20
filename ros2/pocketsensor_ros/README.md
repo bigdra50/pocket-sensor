@@ -1,7 +1,6 @@
 # pocketsensor_ros
 
 iPhone の配信を ROS 2 のトピックへ流す中継ノードである。
-Python SDK が受け取った CDR のバイト列を、デコードせずにそのまま publish する。
 ROS 2 Jazzy で確かめてある。
 
 ## ビルド
@@ -14,8 +13,6 @@ pip install ./python
 colcon build --paths ros2/pocketsensor_msgs ros2/pocketsensor_ros
 source install/setup.bash
 ```
-
-`pocketsensor_msgs` の `.msg` と `.srv` は、`contract/msg/pocketsensor_msgs` のコピーである。
 
 ## 実行
 
@@ -91,8 +88,6 @@ ros2 run image_transport republish compressedDepth raw --ros-args \
 | --- | --- |
 | true | `<name>_odom` から `<name>_anchor_<画像の名前>`。端末が送った値のまま |
 | false | `<name>_link` から `<name>_anchor_<画像の名前>`。同じ時刻の端末の姿勢を使って、端末から見た変換へ直す |
-
-false のときの形は、`apriltag_ros` がカメラの frame からタグへの変換を出すのと同じである。
 
 ## テスト
 

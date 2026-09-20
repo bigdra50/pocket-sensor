@@ -1,7 +1,6 @@
 # 座標系と単位
 
 配信する値は、ROS 2 の規約（REP-103、REP-105、REP-145）と SI 単位に従う。
-Apple の API が返す値との変換は、iPhone のアプリが受け持つ。
 
 ## 共通の規約
 
@@ -47,7 +46,6 @@ Lichtblick と Foxglove では Image パネルの設定の Rotation、ROS 2 で�
 | `<name>_link` | `<name>_color_optical_frame` | (-π/2, 0, -π/2) | 0 |
 | `<name>_link` | `<name>_imu_link` | (0, -π/2, 0) | 0（未測定） |
 
-光学 frame への回転は、RealSense と Orbbec の ROS 2 ラッパーが使う値と同じである。
 カメラと IMU のあいだの並進は測っていないので 0 とし、`device_info` の `calibrated` を false にする。
 
 ## ARKit の姿勢の変換
