@@ -66,6 +66,17 @@ run = [
   "uv run ruff format --check . ../ros2 ../examples",
 ]
 
+# 検査の中身は .secretlintrc.json にある。擬似 UDID の許可もそちら
+[tasks."lint:secret"]
+description = "秘密情報の混入を検査する（node が要る）。見つかった値はマスクされて出る"
+run = """
+npx --yes \
+  --package secretlint@13.0.5 \
+  --package @secretlint/secretlint-rule-preset-recommend@13.0.5 \
+  --package @secretlint/secretlint-rule-pattern@13.0.5 \
+  secretlint "**/*"
+"""
+
 [tasks."view:lichtblick"]
 description = "Lichtblick の Web 版を Docker で立て、3D、RGB、深度を並べたレイアウトで開く URL を出す。接続先は SOURCE、ポートは POCKETSENSOR_LICHTBLICK_PORT で変える"
 run = """

@@ -24,6 +24,7 @@ import pytest
 from pocketsensor import usbmux
 
 _HEADER = struct.Struct("<IIII")
+# この 2 つは .secretlintrc.json の allows に載せた擬似 UDID。値を変えると lint:secret が落ちる
 _USB_UDID = "00008140-001234567890ABCD"
 _NET_UDID = "00008110-00DEADBEEF000001"
 
