@@ -266,10 +266,13 @@ Lichtblick の Web 版（Docker の `ghcr.io/lichtblick-suite/lichtblick`）を 
 | トピックの一覧 | 全チャンネルが、スキーマの名前と一緒に並んだ |
 | 3D | `/tf` と `/tf_static` から、`odom`、`link`、光学 frame、IMU、anchor の木が描かれた |
 | Image（`color/image/compressed`） | JPEG が表示された。実機では、カメラの映像がそのまま出た |
-| Image（`depth/image`） | `16UC1` の深度として認識され、値の範囲を指定すると濃淡で表示された。較正には `depth/camera_info` が自動で選ばれた |
+| Image（`depth/image`） | `16UC1` の深度として認識され、値の範囲を指定すると濃淡で表示された。較正には `depth/camera_info` が自動で選ばれた。範囲を指定しないと 0 mm から 10000 mm の固定になり、0.2 m から 2.9 m の場面はほぼ真っ黒に見えた |
 | Image（`depth/confidence/compressed`） | PNG が復号された。値が 0 から 2 なので、見た目はほぼ黒い |
 | Image（`depth/image/compressedDepth`） | 復号できなかった（`Error decoding image`）。先頭の 12 バイトのヘッダを、Lichtblick は読み飛ばさない |
 | Raw Messages（`imu/data`） | `linear_acceleration.z` が 9.80665 と表示された |
+
+`examples/lichtblick-layout.json` は、深度の色と値の範囲を設定済みのレイアウトである。
+URL の `layoutUrl` にこのファイルの場所を渡すと、実機の深度が色付きで表示された。
 
 アラートは 2 種類出たが、どちらも案内で、復号の失敗ではなかった。
 60 Hz を超えるトピックがあること（IMU の 100 Hz）と、TF の先読みの設定を勧めるものである。
