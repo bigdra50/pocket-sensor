@@ -107,7 +107,7 @@ Swift と Python のコードは、そこから生成する。
 | 座標系と単位 | [docs/frames-and-units.md](docs/frames-and-units.md) |
 | 時刻と時計合わせ | [docs/time.md](docs/time.md) |
 | SDK の API | [docs/sdk-api.md](docs/sdk-api.md) |
-| iPhone 16 Pro での測定の記録 | [docs/research/on-device-measurements.md](docs/research/on-device-measurements.md) |
+| iPhone 16 Pro での測定の記録 | [docs/measurements.md](docs/measurements.md) |
 
 ## License
 

@@ -3,7 +3,6 @@
 iPhone のアプリは、Foxglove WebSocket プロトコル v1 と互換のサーバーとして動く。
 データは ROS 2 の標準メッセージを CDR で符号化して流し、設定は parameters、時計合わせと指示は services で受ける。
 この文書は、接続の手順、チャンネル、parameters、services、背圧の約束を定める。
-プロトコルそのものの事実は [research/foxglove-and-mcap.md](research/foxglove-and-mcap.md) にある。
 
 実装が始まったら、チャンネルと型の正本は `contract/` の機械可読な定義へ移る。
 この文書は、その定義の意図を説明する役割を持つ。
@@ -113,7 +112,7 @@ ROS 2 の側は、`image_transport` の `republish` で `sensor_msgs/Image` へ�
 
 無圧縮の深度と confidence は、15 Hz で毎秒 2.2 MB になる。
 WiFi では最新 1 件を保持する背圧のチャンネルが 1 割ほど捨てられており、この 2 つが帯域の大半を占めていた。
-測定は [research/on-device-measurements.md](research/on-device-measurements.md) にある。
+測定は [measurements.md](measurements.md) にある。
 Python SDK は、端末が広告していれば圧縮のほうを購読する。
 表示ツールで深度を色付きで見たいときは、無圧縮の `depth/image` を購読する。
 

@@ -11,7 +11,7 @@ iOS アプリが iPhone のセンサーを配信し、Python SDK がそれを ZE
 | [frames-and-units.md](frames-and-units.md) | 座標系と単位の約束、Apple の値からの変換 |
 | [time.md](time.md) | 端末の時計、時刻の付け方、時計合わせ |
 | [sdk-api.md](sdk-api.md) | Python SDK の API |
-| [research/](research/) | 設計の根拠にした調査の記録 |
+| [measurements.md](measurements.md) | iPhone の実機で測った記録 |
 
 ## 立ち位置
 
@@ -21,7 +21,6 @@ pocketsensor は、iPhone を SDK 付きのセンサーデバイスとして扱�
 ROS 2 は必須にせず、クライアント側のアダプタとして足す。
 
 軸にするのは、既存のものが満たしていない次の 5 点である。
-根拠は [research/landscape.md](research/landscape.md) にある。
 
 | 軸にする点 | 既存の状況 |
 | --- | --- |
@@ -84,7 +83,6 @@ ROS 2 は必須にせず、クライアント側のアダプタとして足す�
 | ライセンス | Apache-2.0 | 商用のロボットへ組み込める。特許条項があり、`.msg` を取り込む `common_interfaces` と同じである |
 
 認証に TLS の事前共有鍵を使わないのは、Apple の実装では TLS 1.2 でしか使えないためである。
-根拠は [research/apple-apis.md](research/apple-apis.md) にある。
 
 ### Swift 側の CDR と型の生成
 
@@ -116,8 +114,6 @@ Foxglove WebSocket プロトコルの仕様書は、冒頭で自前サーバー�
 - 主なクライアントは pocketsensor 自身の Python SDK である。Foxglove 側が変わっても、失うのは可視化ツールとの互換に限られる
 - 公式 SDK の現行の実装は、v1 の binary のレイアウトをそのまま使っている。新しい `protocol/v2` はリモートアクセス専用で、LAN 内の直接接続とは別物である
 - Lichtblick はオープンソースで、v1 のサブプロトコル名を提示し続けている
-
-詳しい事実は [research/foxglove-and-mcap.md](research/foxglove-and-mcap.md) にある。
 
 ## 対象にするセンサー
 
@@ -253,7 +249,7 @@ xlerobot-book の実験は、iPhone の側に pocketsensor を使う。
 ## 実機で確かめること
 
 時計、座標軸と符号、参照画像の anchor、usbmux 経由での到達は、実機の測定で確かめた。
-記録は [research/on-device-measurements.md](research/on-device-measurements.md) にあり、座標と単位に関わる結果は [frames-and-units.md](frames-and-units.md) の表にもまとめてある。
+記録は [measurements.md](measurements.md) にあり、座標と単位に関わる結果は [frames-and-units.md](frames-and-units.md) の表にもまとめてある。
 残っているのは次の項目である。
 
 | 項目 | 見込み | 確かめ方 |

@@ -3,7 +3,6 @@
 wire に載せる値は、ROS 2 の約束（REP-103、REP-105、REP-145）と SI 単位に揃える。
 Apple の API が返す値との変換は、iPhone のアプリが受け持つ。
 この文書は、frame の定義、ARKit の姿勢の変換、単位の変換を定める。
-根拠にした事実は [research/ros-conventions.md](research/ros-conventions.md) と [research/apple-apis.md](research/apple-apis.md) にある。
 
 ## 共通の約束
 
@@ -186,7 +185,7 @@ confidence による足切りはアプリではせず、クライアントが `d
 ## 実機で確かめたこと
 
 次の点は、iPhone 16 Pro の実機で測って確かめた。
-測定の方法と数値は [research/on-device-measurements.md](research/on-device-measurements.md) にある。
+測定の方法と数値は [measurements.md](measurements.md) にある。
 
 | 項目 | 結果 |
 | --- | --- |

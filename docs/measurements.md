@@ -1,7 +1,7 @@
 # 実機での測定の記録
 
 Apple が文書化していない点を、iPhone の実機で測って確かめた記録である。
-設計文書（[frames-and-units.md](../frames-and-units.md)、[time.md](../time.md)）は、この結果を前提にしている。
+設計文書（[frames-and-units.md](frames-and-units.md)、[time.md](time.md)）は、この結果を前提にしている。
 
 | 項目 | 値 |
 | --- | --- |
@@ -93,7 +93,7 @@ ARKit のカメラ姿勢から、world の下向き (0, -1, 0) をカメラ座�
 | (v_x, v_y, v_z) | 75.9° | 82.6° |
 | (-v_y, v_x, -v_z) | 58.3° | 66.8° |
 
-1 行目が、[frames-and-units.md](../frames-and-units.md) に書いた対応（カメラの +x が端末の -y、+y が +x、+z が +z）である。
+1 行目が、[frames-and-units.md](frames-and-units.md) に書いた対応（カメラの +x が端末の -y、+y が +x、+z が +z）である。
 残る差は、カメラと IMU のサンプルの時刻のずれと、手持ちの揺れによる。
 この対応を使うと、`<name>_link` と `<name>_imu_link` のあいだの回転は rpy で (0, -π/2, 0) になる。
 実測の `gravity` をこの回転で写した結果も、軸の対応で写した結果と一致した。
@@ -341,7 +341,7 @@ ROS 2 Jazzy のコンテナの中で中継をビルドして動かし、`ros2/do
 | 上から見て反時計回りに回す | 姿勢の yaw が +10.2°、`imu/data` の向きから求めた yaw が +10.9° | どちらも増える |
 | 前へすばやく押し出す | 動き出しから 150 ms のあいだの、`<name>_link` の x の加速度のピークが +3.71 m/s² | 正になる |
 
-どの動きでも、軸と符号は [frames-and-units.md](../frames-and-units.md) の定義のとおりだった。
+どの動きでも、軸と符号は [frames-and-units.md](frames-and-units.md) の定義のとおりだった。
 回す動きは角度が小さく、`check-axes` の判定の下限（20°）に届かなかったので、この手順の判定は保留と表示された。
 ARKit の姿勢と IMU という独立した 2 つの出どころが、同じ符号で 0.7° の差に収まっているので、符号は合っていると判断した。
 別の回では、姿勢の yaw が +22.8° まで増えている。
@@ -357,7 +357,7 @@ ARKit の姿勢と IMU という独立した 2 つの出どころが、同じ符
 | anchor の x と、重力の逆向きとの角度の差 | 1.4° | 立てた画像では、x が画像の上を向く |
 | anchor の z と、重力の逆向きとの角度の差 | 89.2° | 立てた画像では、法線は水平になる |
 
-anchor の軸は [frames-and-units.md](../frames-and-units.md) の定義のとおりだった。
+anchor の軸は [frames-and-units.md](frames-and-units.md) の定義のとおりだった。
 端末から画像までの距離は 0.65 m と出た。
 この距離を物差しでは測っていないので、縮尺の正しさは確かめていない。
 
@@ -365,7 +365,7 @@ anchor の軸は [frames-and-units.md](../frames-and-units.md) の定義のと�
 
 1 時間以上にわたって起動と配信を繰り返したあと、`/diagnostics` の `pocketsensor/thermal` が `serious` を示した。
 このとき、RGB と深度は 15 Hz の設定に対して 7.0 Hz、`/tf` は 30 Hz の設定に対して 16 Hz（anchor の分を含む）で送られていた。
-[protocol.md](../protocol.md) に定めた、serious で上限の半分へ下げる動作のとおりである。
+[protocol.md](protocol.md) に定めた、serious で上限の半分へ下げる動作のとおりである。
 IMU のレートは 100 Hz のままだった。
 
 同じ時点で、WiFi の接続が 3 つあり、そのうちの 1 つは無圧縮の深度を購読していた。
@@ -387,7 +387,7 @@ ARKit を止めて 7 分置くと `fair` まで下がるが、配信を再開す
 熱で ARKit のフレームの数そのものが減ると、実績はその分だけ設定より下がる。
 これが原因かどうかは、ARKit のフレームの数を同時に測っていないので確かめていない。
 
-そのあと、間引きをフレームの時刻で決める方式へ改めた（[protocol.md](../protocol.md) の parameters の節）。
+そのあと、間引きをフレームの時刻で決める方式へ改めた（[protocol.md](protocol.md) の parameters の節）。
 熱の状態が `nominal` の端末で 12 秒のあいだ測ると、フレームの組は 15.2 Hz だった。
 182 組のすべてに RGB、深度、姿勢が揃い、組の間隔は最小から最大まで 66.7 ms で一定だった。
 

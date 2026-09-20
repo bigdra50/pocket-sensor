@@ -3,7 +3,6 @@
 pocketsensor は、センサーが計測した時点の時刻をメッセージに付ける。
 クライアントは、iPhone の時計と自分の時計のずれを推定し、計測時刻を自分の時計へ写す。
 この文書は、iPhone 側の時計、wire に載せる時刻、時計合わせの手順、クライアントが扱う時刻の種類を定める。
-根拠にした事実は [research/apple-apis.md](research/apple-apis.md) と [research/sdk-conventions-depth-cameras.md](research/sdk-conventions-depth-cameras.md) にある。
 
 ## 計測時刻を使う理由
 
@@ -32,7 +31,7 @@ iPhone のアプリは、`mach_absolute_time` の系統の時計を基準にす�
 
 `ARFrame.timestamp` と `CMLogItem.timestamp` の時計は、Apple が文書化していない。
 iPhone 16 Pro（iOS 26.7）の実機では、どちらも `CACurrentMediaTime()` と同じ時計だった。
-測定の記録は [research/on-device-measurements.md](research/on-device-measurements.md) にある。
+測定の記録は [measurements.md](measurements.md) にある。
 機種や OS の版で変わる可能性が残るので、アプリはセッションの開始時に自己診断をする。
 フレームや IMU のサンプルが届いた時点の `CACurrentMediaTime()` と、そのサンプルの時刻との差を測る。
 差が 0 秒から 0.5 秒の範囲に収まらなければ、時計が違うものとして `/diagnostics` で警告する。
