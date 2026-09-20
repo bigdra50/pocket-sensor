@@ -4,6 +4,8 @@ iPhone をロボットや PC のセンサーとして使うための、iOS ア�
 LiDAR の深度、カメラ、自己位置、IMU、GNSS を、WiFi か USB で配信する。
 データは ROS 2 標準のメッセージ型で流れるので、Lichtblick、rosbag2、ROS 2 のノードがそのまま使える。
 
+![姿勢の値と RGB-D のプレビューが並ぶアプリの画面](docs/images/app.gif)
+
 ## Requirements
 
 - LiDAR 付きの iPhone（iOS 17 以降）
