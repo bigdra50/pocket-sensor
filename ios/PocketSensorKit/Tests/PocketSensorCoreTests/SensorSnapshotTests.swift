@@ -74,6 +74,21 @@ final class SensorSnapshotTests: XCTestCase {
         XCTAssertEqual(Units.pressureKPaToPa(101.325), snapshot.pressurePa ?? 0, accuracy: 1e-12)
     }
 
+    func testImuAnglesAreThoseOfLinkSoLandscapeIsNotSingular() throws {
+        // カメラ群を上にした横置きで、水平のまま鉛直まわりに 30 度回した姿勢。
+        // imu_link の x は真上を向くので、imu_link のままの roll、pitch、yaw は特異点になる。
+        let link = Frames.quaternion(roll: 0, pitch: 0, yaw: 30 * .pi / 180)
+        let attitude = link * Frames.linkToImu
+        let snapshot = SensorSnapshot.make(fixture(attitudeDeviceToReference: attitude))
+        let rpy = try XCTUnwrap(snapshot.imuRPYDeg)
+        XCTAssertEqual(rpy.roll, 0, accuracy: 1e-6)
+        XCTAssertEqual(rpy.pitch, 0, accuracy: 1e-6)
+        XCTAssertEqual(rpy.yaw, 30, accuracy: 1e-6)
+        // 送る値（imu_link の向き）は変えない
+        let sent = try XCTUnwrap(snapshot.imuOrientation)
+        XCTAssertEqual(abs(simd_dot(sent.vector, attitude.vector)), 1, accuracy: 1e-12)
+    }
+
     func testMakeFallsBackToRawAccelWhenDeviceMotionIsMissing() throws {
         let accelG = SIMD3(0.0, 0.0, -1.0)
         let gyro = SIMD3(0.5, -0.25, 0.125)

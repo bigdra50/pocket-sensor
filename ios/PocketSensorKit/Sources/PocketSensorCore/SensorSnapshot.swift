@@ -81,8 +81,13 @@ public struct SensorSnapshot: Sendable {
         orientation.map { Frames.rpyDegrees(from: $0) }
     }
 
+    /// IMU の向きから求めた `<name>_link` の角度。
+    ///
+    /// `imuOrientation`（送る値）は imu_link の向きである。カメラ群を上にした横置きでは imu_link の x が
+    /// 真上を向き、そのままでは roll、pitch、yaw の特異点に当たって角度が定まらない。
+    /// link へ直すと、`poseRPYDeg` とそのまま見比べられる。
     public var imuRPYDeg: (roll: Double, pitch: Double, yaw: Double)? {
-        imuOrientation.map { Frames.rpyDegrees(from: $0) }
+        imuOrientation.map { Frames.rpyDegrees(from: $0 * Frames.linkToImu.inverse) }
     }
 
     /// capture の生値。単位変換は `make` が MessageBuilders と同じ経路で行う。
