@@ -48,6 +48,7 @@ struct SessionRates {
     var colorSourceHeight: Int
     var depthWidth: Int
     var depthHeight: Int
+    var sensors: SensorNeeds
 }
 
 /// セッション中の共有状態。capture のキューから触るので lock で守る。
@@ -81,6 +82,7 @@ final class StreamingRuntime: @unchecked Sendable {
     var colorSourceHeight = 1440
     var depthWidth = 256
     var depthHeight = 192
+    var sensors = SensorNeeds.none
     var clockAR: ClockSelfCheck?
     var clockAccel: ClockSelfCheck?
     var clockGyro: ClockSelfCheck?
@@ -135,7 +137,8 @@ final class StreamingRuntime: @unchecked Sendable {
             colorSourceWidth: colorSourceWidth,
             colorSourceHeight: colorSourceHeight,
             depthWidth: depthWidth,
-            depthHeight: depthHeight
+            depthHeight: depthHeight,
+            sensors: sensors
         )
     }
 
@@ -187,6 +190,12 @@ final class StreamingRuntime: @unchecked Sendable {
         colorSourceHeight = colorHeight
         if let depthWidth { self.depthWidth = depthWidth }
         if let depthHeight { self.depthHeight = depthHeight }
+        lock.unlock()
+    }
+
+    func setSensors(_ value: SensorNeeds) {
+        lock.lock()
+        sensors = value
         lock.unlock()
     }
 

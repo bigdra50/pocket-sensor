@@ -110,7 +110,8 @@ final class StatusPublisher: @unchecked Sendable {
                 encodeSkips: ["color": rates.encodeSkips],
                 clock: rates.clock,
                 magCalibration: rates.magCalibration,
-                locationAuthorization: locationAuthorization()
+                locationAuthorization: locationAuthorization(),
+                sensors: rates.sensors
             )
         )
         runtime.server.publish("diagnostics", stampNs: stampNs, payload: encodeCDR(diag))

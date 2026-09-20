@@ -62,7 +62,8 @@ final class MotionCapture {
     private let motionHandlers = HandlerList<DeviceMotionSample>()
     private let altimeterHandlers = HandlerList<AltimeterSample>()
     private let lock = NSLock()
-    private var running = false
+    private var motionRunning = false
+    private var altimeterRunning = false
 
     func onAccel(_ handler: @escaping (AccelSample) -> Void) {
         accelHandlers.add(handler)
@@ -81,10 +82,10 @@ final class MotionCapture {
     }
 
     func start(rateHz: Double, referenceFrame: CMAttitudeReferenceFrame) {
-        stop()
+        stopMotion()
         let interval = rateHz > 0 ? 1.0 / rateHz : 0.01
         lock.lock()
-        running = true
+        motionRunning = true
         lock.unlock()
 
         motion.accelerometerUpdateInterval = interval
@@ -93,7 +94,7 @@ final class MotionCapture {
 
         if motion.isAccelerometerAvailable {
             motion.startAccelerometerUpdates(to: opQueue) { [weak self] data, _ in
-                guard let self, self.isRunning, let data else { return }
+                guard let self, self.isMotionRunning, let data else { return }
                 self.accelHandlers.emit(
                     AccelSample(timestamp: data.timestamp, x: data.acceleration.x, y: data.acceleration.y, z: data.acceleration.z)
                 )
@@ -101,7 +102,7 @@ final class MotionCapture {
         }
         if motion.isGyroAvailable {
             motion.startGyroUpdates(to: opQueue) { [weak self] data, _ in
-                guard let self, self.isRunning, let data else { return }
+                guard let self, self.isMotionRunning, let data else { return }
                 self.gyroHandlers.emit(
                     GyroSample(timestamp: data.timestamp, x: data.rotationRate.x, y: data.rotationRate.y, z: data.rotationRate.z)
                 )
@@ -109,7 +110,7 @@ final class MotionCapture {
         }
         if motion.isDeviceMotionAvailable {
             motion.startDeviceMotionUpdates(using: referenceFrame, to: opQueue) { [weak self] data, _ in
-                guard let self, self.isRunning, let data else { return }
+                guard let self, self.isMotionRunning, let data else { return }
                 let q = data.attitude.quaternion
                 let g = data.gravity
                 let ua = data.userAcceleration
@@ -139,35 +140,59 @@ final class MotionCapture {
                 )
             }
         }
-        if CMAltimeter.isRelativeAltitudeAvailable() {
-            altimeter.startRelativeAltitudeUpdates(to: opQueue) { [weak self] data, _ in
-                guard let self, self.isRunning, let data else { return }
-                self.altimeterHandlers.emit(
-                    AltimeterSample(
-                        timestamp: data.timestamp,
-                        pressure: data.pressure.doubleValue,
-                        relativeAltitude: data.relativeAltitude.doubleValue
-                    )
+    }
+
+    func startAltimeter() {
+        lock.lock()
+        let already = altimeterRunning
+        altimeterRunning = true
+        lock.unlock()
+        guard !already else { return }
+        guard CMAltimeter.isRelativeAltitudeAvailable() else { return }
+        altimeter.startRelativeAltitudeUpdates(to: opQueue) { [weak self] data, _ in
+            guard let self, self.isAltimeterRunning, let data else { return }
+            self.altimeterHandlers.emit(
+                AltimeterSample(
+                    timestamp: data.timestamp,
+                    pressure: data.pressure.doubleValue,
+                    relativeAltitude: data.relativeAltitude.doubleValue
                 )
-            }
+            )
         }
     }
 
     func stop() {
+        stopMotion()
+        stopAltimeter()
+    }
+
+    func stopMotion() {
         lock.lock()
-        running = false
+        motionRunning = false
         lock.unlock()
         motion.stopAccelerometerUpdates()
         motion.stopGyroUpdates()
         motion.stopDeviceMotionUpdates()
-        if CMAltimeter.isRelativeAltitudeAvailable() {
-            altimeter.stopRelativeAltitudeUpdates()
-        }
     }
 
-    private var isRunning: Bool {
+    func stopAltimeter() {
+        lock.lock()
+        let wasRunning = altimeterRunning
+        altimeterRunning = false
+        lock.unlock()
+        guard wasRunning, CMAltimeter.isRelativeAltitudeAvailable() else { return }
+        altimeter.stopRelativeAltitudeUpdates()
+    }
+
+    private var isMotionRunning: Bool {
         lock.lock()
         defer { lock.unlock() }
-        return running
+        return motionRunning
+    }
+
+    private var isAltimeterRunning: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return altimeterRunning
     }
 }

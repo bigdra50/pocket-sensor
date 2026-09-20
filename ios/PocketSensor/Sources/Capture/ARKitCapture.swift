@@ -32,36 +32,56 @@ final class ARKitCapture: NSObject, ARSessionDelegate, @unchecked Sendable {
     private let queue = DispatchQueue(label: "pocketsensor.arkit")
     private let frames = HandlerList<ARFrameSample>()
     private var deliveredIndex: UInt64 = 0
+    private var depthEnabled = false
+    private var sessionRunning = false
 
     func onFrame(_ handler: @escaping (ARFrameSample) -> Void) {
         frames.add(handler)
     }
 
-    func start(reset: Bool) {
+    func start(reset: Bool, depth: Bool) {
         session.delegate = self
         session.delegateQueue = queue
-        queue.async { self.run(reset: reset) }
+        queue.async {
+            self.depthEnabled = depth
+            self.run(reset: reset)
+        }
+    }
+
+    /// 動作中に深度の要否だけを変える。reset しないので world 原点は保つ。
+    func setDepth(_ depth: Bool) {
+        queue.async {
+            guard self.sessionRunning else { return }
+            guard self.depthEnabled != depth else { return }
+            self.depthEnabled = depth
+            self.run(reset: false)
+        }
     }
 
     func pause() {
-        queue.async { self.session.pause() }
+        queue.async {
+            self.session.pause()
+            self.sessionRunning = false
+        }
     }
 
     /// world 原点を作り直す。消費側への不連続の知らせは呼び出し側が持つ。
     func resetOrigin() {
-        queue.async { self.run(reset: true) }
+        queue.async {
+            guard self.sessionRunning else { return }
+            self.run(reset: true)
+        }
     }
 
-    /// queue 上の実装
-    private func run(reset: Bool) {
+    /// 平面検出と環境テクスチャは自己位置に要らず、CPU と熱を使う。
+    /// smoothedSceneDepth は時間平滑で移動体に残像が出るので sceneDepth を使う。
+    static func makeConfiguration(depth: Bool) -> ARWorldTrackingConfiguration {
         let configuration = ARWorldTrackingConfiguration()
         // gravityAndHeading は方位センサの揺れを拾うので使わない
         configuration.worldAlignment = .gravity
-        // 平面検出と環境テクスチャは自己位置に要らず、CPU と熱を使う
         configuration.planeDetection = []
         configuration.environmentTexturing = .none
-        // smoothedSceneDepth は時間平滑で移動体に残像が出るので sceneDepth を使う
-        if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
+        if depth, ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
             configuration.frameSemantics.insert(.sceneDepth)
         }
         if let images = ARReferenceImage.referenceImages(inGroupNamed: "Anchors", bundle: nil), !images.isEmpty {
@@ -70,7 +90,14 @@ final class ARKitCapture: NSObject, ARSessionDelegate, @unchecked Sendable {
             // 1 枚の追跡なら CPU は小さく、視野に入っている間だけ新しい transform が届く
             configuration.maximumNumberOfTrackedImages = 1
         }
+        return configuration
+    }
+
+    /// queue 上の実装
+    private func run(reset: Bool) {
+        let configuration = Self.makeConfiguration(depth: depthEnabled)
         session.run(configuration, options: reset ? [.resetTracking, .removeExistingAnchors] : [])
+        sessionRunning = true
     }
 
     static func trackingLabel(_ state: ARCamera.TrackingState) -> String {

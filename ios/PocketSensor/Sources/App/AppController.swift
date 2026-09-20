@@ -17,7 +17,7 @@ final class AppController: ObservableObject {
     @Published private(set) var clients = 0
     @Published private(set) var deviceName = DeviceName.defaultValue
     @Published private(set) var linkAddresses: [LinkAddresses.Record] = []
-    @Published private(set) var monitorOn = true
+    @Published private(set) var displaySettings = DisplaySettings()
 
     let arkit = ARKitCapture()
     let motion = MotionCapture()
@@ -25,7 +25,7 @@ final class AppController: ObservableObject {
     let battery = BatteryCapture()
     let thermalMonitor = ThermalMonitor()
     let nameStore = DeviceNameStore()
-    let monitorStore = MonitorStore()
+    let displayStore = DisplaySettingsStore()
 
     private var session: StreamingSession?
     private var probe: Probe?
@@ -36,6 +36,7 @@ final class AppController: ObservableObject {
     private let probeMode = ProcessInfo.processInfo.arguments.contains("-PocketSensorProbe")
     private let demoValues = ProcessInfo.processInfo.arguments.contains("-PocketSensorDemoValues")
     private let demoPreview = ProcessInfo.processInfo.arguments.contains("-PocketSensorDemoPreview")
+    private let displayOff = ProcessInfo.processInfo.arguments.contains("-PocketSensorDisplayOff")
     private let sampleBox = SampleBox()
     private var lastDepthSummaryAt: TimeInterval = 0
 
@@ -47,7 +48,11 @@ final class AppController: ObservableObject {
 
     init() {
         deviceName = nameStore.load()
-        monitorOn = monitorStore.load()
+        if displayOff {
+            displaySettings = .allOff
+        } else {
+            displaySettings = displayStore.load()
+        }
         if demoValues {
             snapshot = .demo
             deviceName = Self.demoDeviceName
@@ -116,8 +121,9 @@ final class AppController: ObservableObject {
         if probeMode {
             battery.start()
             motion.start(rateHz: 100, referenceFrame: .xArbitraryCorrectedZVertical)
+            motion.startAltimeter()
             if arkitSupported {
-                arkit.start(reset: false)
+                arkit.start(reset: false, depth: true)
             }
         } else {
             enterForeground()
@@ -140,7 +146,8 @@ final class AppController: ObservableObject {
             location: location,
             battery: battery,
             thermal: thermalMonitor.current,
-            monitorOn: monitorOn
+            display: displaySettings,
+            previewVisible: previewVisible
         )
         session.onServerState = { [weak self] state, port in
             DispatchQueue.main.async {
@@ -195,10 +202,12 @@ final class AppController: ObservableObject {
         return true
     }
 
-    func setMonitorOn(_ on: Bool) {
-        monitorOn = on
-        monitorStore.save(on)
-        session?.setMonitorOn(on)
+    func setDisplaySettings(_ settings: DisplaySettings) {
+        displaySettings = settings
+        if !displayOff {
+            displayStore.save(settings)
+        }
+        session?.setDisplaySettings(settings)
     }
 
     /// 画面タップ用。ON のあいだだけプレビュー用 queue で RGB と深度の 1 組を作る。
@@ -210,6 +219,7 @@ final class AppController: ObservableObject {
         } else if demoPreview {
             preview = PreviewPair(rgb: DepthPreview.demoColorBars(), depth: DepthPreview.demoGradient())
         }
+        session?.setPreviewVisible(previewVisible)
     }
 
     private func handleFrame(_ sample: ARFrameSample) {
@@ -258,12 +268,16 @@ final class AppController: ObservableObject {
             }
             return
         }
-        let latest = sampleBox.copy()
+        let latest: SampleBox.Latest
         var ratesHz: [String: Double] = [:]
         var drops: [String: Int] = [:]
         var imuReference = ImuReferenceFrame.arbitrary
         var clock = ClockCheckStatus.pending
         var origin = snapshot.originEpoch
+        var sensors = SensorNeeds.none
+        if probeMode {
+            sensors = .allOn
+        }
         if let session {
             let panel = session.panelStats()
             ratesHz = panel.ratesHz
@@ -272,7 +286,30 @@ final class AppController: ObservableObject {
             imuReference = panel.imuReference
             clock = panel.clock
             origin = panel.originEpoch
+            sensors = panel.sensors
         }
+        sampleBox.update { box in
+            if !sensors.arkit {
+                box.tracking = "off"
+                box.cameraTransform = nil
+                box.depthCenterM = nil
+            }
+            if !sensors.motion {
+                box.accelG = nil
+                box.gyroRadS = nil
+                box.motion = nil
+            }
+            if !sensors.altimeter {
+                box.altimeter = nil
+            }
+            if !sensors.gnss {
+                box.location = nil
+            }
+            if !sensors.battery {
+                box.battery = nil
+            }
+        }
+        latest = sampleBox.copy()
         let motionSample = latest.motion
         snapshot = SensorSnapshot.make(
             SensorSnapshot.Input(

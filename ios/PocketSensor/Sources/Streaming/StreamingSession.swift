@@ -17,11 +17,20 @@ final class StreamingSession: @unchecked Sendable {
     private let motion: MotionCapture
     private let location: LocationCapture
     private let battery: BatteryCapture
+    private var arkitRunning = false
+    private var arkitStartedInSession = false
+    private var depthRunning = false
     private var motionRunning = false
+    private var altimeterRunning = false
     private var locationRunning = false
     private var batteryRunning = false
-    private var monitorOn: Bool
+    private var display: DisplaySettings
+    private var previewVisible: Bool
+    private var hold = SensorHold()
+    private var effectiveSensors = SensorNeeds.none
     private let sensorLock = NSLock()
+    private let holdQueue = DispatchQueue(label: "pocketsensor.sensors")
+    private var holdTimer: DispatchSourceTimer?
 
     var onServerState: ((String, UInt16?) -> Void)?
     var onClientCount: ((Int) -> Void)?
@@ -34,7 +43,8 @@ final class StreamingSession: @unchecked Sendable {
         location: LocationCapture,
         battery: BatteryCapture,
         thermal: ProcessInfo.ThermalState,
-        monitorOn: Bool = true
+        display: DisplaySettings = DisplaySettings(),
+        previewVisible: Bool = false
     ) {
         sessionId = UUID().uuidString
         let anchor = SessionClocks.makeAnchor()
@@ -51,7 +61,8 @@ final class StreamingSession: @unchecked Sendable {
         self.motion = motion
         self.location = location
         self.battery = battery
-        self.monitorOn = monitorOn
+        self.display = display
+        self.previewVisible = previewVisible
         runtime = StreamingRuntime(server: server, anchor: anchor, sessionId: sessionId, deviceName: deviceName)
         runtime.setThermal(StreamingMap.thermal(thermal))
         arFrames = ARFramePublisher(runtime: runtime)
@@ -80,7 +91,7 @@ final class StreamingSession: @unchecked Sendable {
             self?.onClientCount?(count)
         }
         server.onSubscribersChange = { [weak self] _, _ in
-            self?.refreshSensors()
+            self?.reconcileSensors()
         }
         server.onParametersChange = { [weak self] changed in
             guard let self else { return }
@@ -97,27 +108,35 @@ final class StreamingSession: @unchecked Sendable {
         }
         server.start()
         statusPub.start()
-        if ARKitCapture.isSupported {
-            arkit.start(reset: true)
-        }
-        refreshSensors()
+        startHoldTimer()
+        reconcileSensors()
     }
 
     func stop() {
         runtime.markStopped()
         statusPub.stop()
+        holdTimer?.cancel()
+        holdTimer = nil
         sensorLock.lock()
+        let stopARKit = arkitRunning
         let stopMotion = motionRunning
+        let stopAltimeter = altimeterRunning
         let stopLocation = locationRunning
         let stopBattery = batteryRunning
+        arkitRunning = false
+        depthRunning = false
         motionRunning = false
+        altimeterRunning = false
         locationRunning = false
         batteryRunning = false
+        effectiveSensors = .none
         sensorLock.unlock()
-        if stopMotion { motion.stop() }
+        runtime.setSensors(.none)
+        if stopMotion { motion.stopMotion() }
+        if stopAltimeter { motion.stopAltimeter() }
         if stopLocation { location.stop() }
         if stopBattery { battery.stop() }
-        arkit.pause()
+        if stopARKit { arkit.pause() }
         server.stop()
         onServerState?("stopped", nil)
         onClientCount?(0)
@@ -156,9 +175,14 @@ final class StreamingSession: @unchecked Sendable {
     }
 
     func resetOrigin() {
+        sensorLock.lock()
+        let running = arkitRunning
+        sensorLock.unlock()
         let epoch = runtime.incrementOriginEpoch()
         arFrames.resetGates()
-        arkit.resetOrigin()
+        if running {
+            arkit.resetOrigin()
+        }
         onOriginEpoch?(epoch)
     }
 
@@ -176,11 +200,24 @@ final class StreamingSession: @unchecked Sendable {
         server.stats().clients
     }
 
-    func setMonitorOn(_ on: Bool) {
+    func setDisplaySettings(_ settings: DisplaySettings) {
         sensorLock.lock()
-        monitorOn = on
+        display = settings
         sensorLock.unlock()
-        refreshSensors()
+        reconcileSensors()
+    }
+
+    func setPreviewVisible(_ visible: Bool) {
+        sensorLock.lock()
+        previewVisible = visible
+        sensorLock.unlock()
+        reconcileSensors()
+    }
+
+    func runningSensors() -> SensorNeeds {
+        sensorLock.lock()
+        defer { sensorLock.unlock() }
+        return effectiveSensors
     }
 
     func panelStats() -> (
@@ -190,7 +227,8 @@ final class StreamingSession: @unchecked Sendable {
         originEpoch: UInt32,
         imuReference: ImuReferenceFrame,
         clock: ClockCheckStatus,
-        magCalibration: MagCalibration
+        magCalibration: MagCalibration,
+        sensors: SensorNeeds
     ) {
         let stats = server.stats()
         let nowS = CACurrentMediaTime()
@@ -206,31 +244,69 @@ final class StreamingSession: @unchecked Sendable {
             sessionRates.epoch,
             sessionRates.reference,
             sessionRates.clock,
-            sessionRates.magCalibration
+            sessionRates.magCalibration,
+            sessionRates.sensors
         )
     }
 
-    private func refreshSensors() {
-        let subscribedMotion =
-            server.hasSubscribers("imu_raw")
-            || server.hasSubscribers("imu")
-            || server.hasSubscribers("mag")
-            || server.hasSubscribers("pressure")
-        let subscribedLocation = server.hasSubscribers("gnss_fix") || server.hasSubscribers("gnss_time_reference")
-        let subscribedBattery = server.hasSubscribers("battery")
+    private func startHoldTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: holdQueue)
+        timer.schedule(deadline: .now() + 1.0, repeating: 1.0, leeway: .milliseconds(50))
+        timer.setEventHandler { [weak self] in
+            self?.reconcileSensors()
+        }
+        timer.resume()
+        holdTimer = timer
+    }
 
+    /// 購読、画面、プレビュー、ホールド期限から start/stop を決める。
+    /// センサーの経路へは入らず、capture のキューも待たない。
+    private func reconcileSensors() {
+        let subscribed = server.subscribedKeys()
         sensorLock.lock()
-        let wantMotion = SensorDemand.motion(subscribed: subscribedMotion, monitorOn: monitorOn)
-        let wantLocation = SensorDemand.gnss(subscribed: subscribedLocation, monitorOn: monitorOn)
-        let wantBattery = SensorDemand.battery(subscribed: subscribedBattery, monitorOn: monitorOn)
-        let startMotion = wantMotion && !motionRunning
-        let stopMotion = !wantMotion && motionRunning
-        let startLocation = wantLocation && !locationRunning
-        let stopLocation = !wantLocation && locationRunning
-        let startBattery = wantBattery && !batteryRunning
-        let stopBattery = !wantBattery && batteryRunning
+        let needs = SensorDemand.needs(
+            subscribedKeys: subscribed,
+            display: display,
+            previewVisible: previewVisible
+        )
+        let effective = hold.update(needs: needs, now: CACurrentMediaTime())
+        var running = effective
+        if !ARKitCapture.isSupported {
+            running.arkit = false
+            running.depth = false
+        }
+        effectiveSensors = running
+        runtime.setSensors(running)
+
+        let startARKit = running.arkit && !arkitRunning
+        let stopARKit = !running.arkit && arkitRunning
+        let bumpEpoch = startARKit && arkitStartedInSession
+        let changeDepth = running.arkit && arkitRunning && running.depth != depthRunning
+        let depthWanted = running.depth
+        let startMotion = running.motion && !motionRunning
+        let stopMotion = !running.motion && motionRunning
+        let startAltimeter = running.altimeter && !altimeterRunning
+        let stopAltimeter = !running.altimeter && altimeterRunning
+        let startLocation = running.gnss && !locationRunning
+        let stopLocation = !running.gnss && locationRunning
+        let startBattery = running.battery && !batteryRunning
+        let stopBattery = !running.battery && batteryRunning
+        if startARKit {
+            arkitRunning = true
+            arkitStartedInSession = true
+            depthRunning = depthWanted
+        }
+        if stopARKit {
+            arkitRunning = false
+            depthRunning = false
+        }
+        if changeDepth {
+            depthRunning = depthWanted
+        }
         if startMotion { motionRunning = true }
         if stopMotion { motionRunning = false }
+        if startAltimeter { altimeterRunning = true }
+        if stopAltimeter { altimeterRunning = false }
         if startLocation { locationRunning = true }
         if stopLocation { locationRunning = false }
         if startBattery { batteryRunning = true }
@@ -239,10 +315,29 @@ final class StreamingSession: @unchecked Sendable {
         let imuRef = runtime.rates().reference
         sensorLock.unlock()
 
+        if startARKit {
+            if bumpEpoch {
+                let epoch = runtime.incrementOriginEpoch()
+                arFrames.resetGates()
+                onOriginEpoch?(epoch)
+            }
+            arkit.start(reset: true, depth: depthWanted)
+        } else if stopARKit {
+            arkit.pause()
+            runtime.setTracking((.notAvailable, .none))
+        } else if changeDepth {
+            arkit.setDepth(depthWanted)
+        }
+
         if startMotion {
             motion.start(rateHz: imuRate, referenceFrame: StreamingMap.cmAttitudeFrame(imuRef))
         } else if stopMotion {
-            motion.stop()
+            motion.stopMotion()
+        }
+        if startAltimeter {
+            motion.startAltimeter()
+        } else if stopAltimeter {
+            motion.stopAltimeter()
         }
         if startLocation {
             location.start()

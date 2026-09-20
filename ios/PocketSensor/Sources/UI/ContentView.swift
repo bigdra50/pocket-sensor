@@ -14,6 +14,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var editingName = false
     @State private var nameDraft = ""
+    @State private var showingSettings = ProcessInfo.processInfo.arguments.contains("-PocketSensorDemoSettings")
 
     // iPhone 16 Pro 横幅 874 pt。横向きのシステム safe area は左 59（Dynamic Island）+ 右 34（ホームインジケータ）。
     // landscapeBody はさらに padding 8+16 と safeAreaPadding 12+16。本文幅 874-59-34-8-16-12-16 = 729。
@@ -41,10 +42,6 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            controller.togglePreview()
-        }
         .onAppear {
             interfaceOrientation.start()
             controller.start()
@@ -62,10 +59,13 @@ struct ContentView: View {
         .sheet(isPresented: $editingName) {
             nameEditor
         }
+        .sheet(isPresented: $showingSettings) {
+            settingsSheet
+        }
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 16) {
+        HStack(alignment: .center, spacing: 16) {
             Text("PocketSensor")
                 .font(.system(.title2, design: .default, weight: .semibold))
             if !controller.arkitSupported {
@@ -74,6 +74,16 @@ struct ContentView: View {
                     .foregroundStyle(.red)
             }
             Spacer(minLength: 0)
+            Button {
+                showingSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 18, weight: .medium))
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("設定")
         }
         .padding(.horizontal, 8)
         .padding(.top, 8)
@@ -107,6 +117,10 @@ struct ContentView: View {
         .padding(.trailing, 16)
         .safeAreaPadding(.leading, 12)
         .safeAreaPadding(.trailing, 16)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            controller.togglePreview()
+        }
     }
 
     private var portraitBody: some View {
@@ -132,6 +146,10 @@ struct ContentView: View {
             .padding(.leading, 8)
             .padding(.trailing, 16)
             .safeAreaPadding(.horizontal, 12)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            controller.togglePreview()
         }
     }
 
@@ -171,22 +189,7 @@ struct ContentView: View {
 
     private var linkColumn: some View {
         VStack(alignment: .leading, spacing: sectionSpacing) {
-            HStack(alignment: .center, spacing: 8) {
-                sectionTitle("Link")
-                Spacer(minLength: 0)
-                // スイッチだけでは何を切り替えるのか分からないので、名前を添える。
-                Text("monitor")
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                Toggle("Monitor", isOn: Binding(
-                    get: { controller.monitorOn },
-                    set: { controller.setMonitorOn($0) }
-                ))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .scaleEffect(0.72, anchor: .trailing)
-                .frame(height: 18, alignment: .trailing)
-            }
+            sectionTitle("Link")
             VStack(alignment: .leading, spacing: metricSpacing) {
                 envValue(serverClientsText)
                 ForEach(controller.linkAddresses, id: \.self) { row in
@@ -248,6 +251,56 @@ struct ContentView: View {
             }
         }
         .presentationDetents([.medium])
+    }
+
+    private var settingsSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("OFF にした区画のセンサーは、受け手が購読したときだけ動きます。")
+                }
+                Section {
+                    Toggle("Pose を表示", isOn: displayBinding(\.pose))
+                } footer: {
+                    Text("購読が無くても ARKit を動かします。発熱と消費電力が増えます。")
+                }
+                Section {
+                    Toggle("IMU を表示", isOn: displayBinding(\.imu))
+                } footer: {
+                    Text("購読が無くても IMU と地磁気を取得します。")
+                }
+                Section {
+                    Toggle("環境を表示", isOn: displayBinding(\.environment))
+                } footer: {
+                    Text("購読が無くても気圧と電池を取得します。")
+                }
+                Section {
+                    Toggle("GNSS を表示", isOn: displayBinding(\.gnss))
+                } footer: {
+                    Text("購読が無くても測位します。最初に位置情報の許可を求めます。")
+                }
+            }
+            .navigationTitle("設定")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("閉じる") { showingSettings = false }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func displayBinding(_ keyPath: WritableKeyPath<DisplaySettings, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { controller.displaySettings[keyPath: keyPath] },
+            set: { value in
+                var next = controller.displaySettings
+                next[keyPath: keyPath] = value
+                controller.setDisplaySettings(next)
+            }
+        )
     }
 
     private var poseColumn: some View {
@@ -385,6 +438,7 @@ struct ContentView: View {
         switch controller.snapshot.tracking {
         case "normal": return Color(red: 0.12, green: 0.55, blue: 0.28)
         case let s where s.hasPrefix("limited"): return Color(red: 0.85, green: 0.45, blue: 0.05)
+        case "off": return .secondary
         default: return .primary
         }
     }
