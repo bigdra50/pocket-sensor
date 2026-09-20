@@ -1,5 +1,6 @@
 import PocketSensorCore
 import SwiftUI
+import UIKit
 
 /// 配信している値を人が確かめる計器盤。数値は 5 Hz の snapshot。
 ///
@@ -14,8 +15,15 @@ struct ContentView: View {
     @State private var editingName = false
     @State private var nameDraft = ""
 
-    private static let heatmapLongLandscape: CGFloat = 140
-    private static let heatmapLongPortrait: CGFloat = 120
+    // iPhone 16 Pro 横幅 874 pt。横向きのシステム safe area は左 59（Dynamic Island）+ 右 34（ホームインジケータ）。
+    // landscapeBody はさらに padding 8+16 と safeAreaPadding 12+16。本文幅 874-59-34-8-16-12-16 = 729。
+    // 仕切りは 1 + 水平 padding 12×2 = 25。右列は (729-25)/2 = 352。
+    // 長辺 140 のタイル 2 枚 + 間隔 8 = 288 で、352 に収まる。
+    private static let previewLongLandscape: CGFloat = 140
+    // 縦向きは 90° 回して 126×168。2 枚 + 間隔 8 = 260 pt。
+    // iPhone 16 Pro 幅 402。左右 padding 8+16 と safeAreaPadding 12+12 = 48。本文 354。260 は収まる。
+    private static let previewLongPortrait: CGFloat = 168
+    private static let previewTileSpacing: CGFloat = 8
     private static let panelCorner: CGFloat = 8
     private static let labelWidth: CGFloat = 52
     private static let valueSize: CGFloat = 12
@@ -83,7 +91,7 @@ struct ContentView: View {
             columnDivider
             columnScroll {
                 if controller.previewVisible {
-                    depthSection(long: Self.heatmapLongLandscape)
+                    rgbdSection(long: Self.previewLongLandscape)
                     horizontalRule
                 }
                 linkColumn
@@ -109,7 +117,7 @@ struct ContentView: View {
                 poseColumn
                 if controller.previewVisible {
                     horizontalRule
-                    depthSection(long: Self.heatmapLongPortrait)
+                    rgbdSection(long: Self.previewLongPortrait)
                 }
                 horizontalRule
                 imuColumn
@@ -360,10 +368,10 @@ struct ContentView: View {
         }
     }
 
-    private func depthSection(long: CGFloat) -> some View {
+    private func rgbdSection(long: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionTitle("Depth")
-            depthHeatmap(long: long)
+            sectionTitle("RGB-D")
+            rgbdTiles(preferredLong: long)
             Text(
                 controller.snapshot.depthCenterM.map { String(format: "center  %.2f m", $0) }
                     ?? "center  \(Readout.missing)"
@@ -445,17 +453,43 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func depthHeatmap(long: CGFloat) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Self.panelCorner, style: .continuous)
+    private func rgbdTiles(preferredLong: CGFloat) -> some View {
         let orientation = DepthPreview.displayOrientation(for: interfaceOrientation.current)
-        let size = DepthPreview.frameSize(long: long, for: orientation)
+        RGBDTileLayout(
+            preferredLong: preferredLong,
+            orientation: orientation,
+            spacing: Self.previewTileSpacing
+        ) {
+            previewTile(
+                image: controller.preview?.rgb,
+                orientation: orientation,
+                interpolation: .medium,
+                overlay: "rgb"
+            )
+            previewTile(
+                image: controller.preview?.depth,
+                orientation: orientation,
+                interpolation: .none,
+                overlay: String(format: "%.2f–%.1f m", DepthPreview.nearM, DepthPreview.farM)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func previewTile(
+        image: UIImage?,
+        orientation: UIImage.Orientation,
+        interpolation: Image.Interpolation,
+        overlay: String
+    ) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Self.panelCorner, style: .continuous)
         Group {
-            if let image = controller.depthPreview {
+            if let image {
                 Image(uiImage: DepthPreview.reoriented(image, to: orientation))
                     .resizable()
-                    .interpolation(.none)
+                    .interpolation(interpolation)
                     .overlay(alignment: .topLeading) {
-                        Text(String(format: "%.2f–%.1f m", DepthPreview.nearM, DepthPreview.farM))
+                        Text(overlay)
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .padding(4)
                             .background(.black.opacity(0.45))
@@ -468,8 +502,45 @@ struct ContentView: View {
                     .background(Color.primary.opacity(0.06))
             }
         }
-        .frame(width: size.width, height: size.height)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipShape(shape)
         .overlay(shape.strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
+    }
+}
+
+/// 2 枚のタイルを同じ大きさで横に並べる。幅が足りなければ `fittedLong` で長辺を縮める。
+private struct RGBDTileLayout: Layout {
+    var preferredLong: CGFloat
+    var orientation: UIImage.Orientation
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let available = proposal.width ?? .greatestFiniteMagnitude
+        let tile = tileSize(availableWidth: available)
+        let count = CGFloat(subviews.count)
+        let gaps = max(count - 1, 0)
+        return CGSize(width: tile.width * count + spacing * gaps, height: tile.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let tile = tileSize(availableWidth: bounds.width)
+        var x = bounds.minX
+        for subview in subviews {
+            subview.place(
+                at: CGPoint(x: x, y: bounds.minY),
+                proposal: ProposedViewSize(width: tile.width, height: tile.height)
+            )
+            x += tile.width + spacing
+        }
+    }
+
+    private func tileSize(availableWidth: CGFloat) -> CGSize {
+        let long = DepthPreview.fittedLong(
+            preferred: preferredLong,
+            availableWidth: availableWidth,
+            spacing: spacing,
+            for: orientation
+        )
+        return DepthPreview.frameSize(long: long, for: orientation)
     }
 }

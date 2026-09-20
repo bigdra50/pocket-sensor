@@ -3,10 +3,10 @@ import CoreVideo
 import Foundation
 import UIKit
 
-/// 深度マップを小さなヒートマップ画像にする（デバッグ表示用）。
+/// プレビュー用の深度ヒートマップと、画面へ出すときの枠・向き。
 ///
-/// RGB カメラのプレビューは出さない。画面タップでプレビュー ON のときだけ
-/// ARFrame ごと（間引きなし）に呼ばれる。
+/// RGB の縮小は `PreviewScaler` が受け持つ。ここは深度の色付けと、
+/// 画面の向きに合わせた表示枠だけを扱う。配信する画素の並びは変えない。
 enum DepthPreview {
     /// 色付けの近端（これより近いと赤寄り）
     static let nearM: Float = 0.25
@@ -44,10 +44,10 @@ enum DepthPreview {
         return image(rgba: rgba(depth: depth, width: width, height: height), width: width, height: height)
     }
 
-    /// 深度マップを画面に正立させて表示するための向き。
+    /// RGB と深度を画面に正立させて表示するための向き。
     ///
-    /// ARKit の深度マップは、画面が回ってもセンサ本来の並び（カメラ群を上にした横持ち、画面の landscapeRight）で届く。
-    /// 対応は iPhone の写真の EXIF と同じ。
+    /// ARKit の画素は、画面が回ってもセンサ本来の並び（カメラ群を上にした横持ち、画面の landscapeRight）で届く。
+    /// 対応は iPhone の写真の EXIF と同じ。回すのは表示だけである。
     static func displayOrientation(for interface: UIInterfaceOrientation) -> UIImage.Orientation {
         switch interface {
         case .landscapeLeft: return .down
@@ -61,7 +61,7 @@ enum DepthPreview {
 
     /// ヒートマップの表示枠。長辺を `long` にして深度マップの縦横比を保ち、横倒しで表示するときは縦長にする。
     static func frameSize(long: CGFloat, for orientation: UIImage.Orientation) -> CGSize {
-        // sceneDepth の深度マップは 256×192
+        // sceneDepth の深度マップは 256×192。RGB も同じ 4:3 なので枠を共有する
         let short = long * 192 / 256
         switch orientation {
         case .left, .right, .leftMirrored, .rightMirrored:
@@ -71,7 +71,26 @@ enum DepthPreview {
         }
     }
 
-    /// 表示の向きだけを付け替える。ARFrame レートで呼ばれるので、画素は並べ替えずに同じ CGImage を包み直す。
+    /// 2 枚を横に並べたとき可用幅へ収まる長辺。足りなければ縮める。折り返しと切り取りを避ける。
+    static func fittedLong(
+        preferred: CGFloat,
+        availableWidth: CGFloat,
+        spacing: CGFloat,
+        for orientation: UIImage.Orientation
+    ) -> CGFloat {
+        let tileWidthBudget = (availableWidth - spacing) / 2
+        guard tileWidthBudget > 0 else { return 0 }
+        let maxLong: CGFloat
+        switch orientation {
+        case .left, .right, .leftMirrored, .rightMirrored:
+            maxLong = tileWidthBudget * 256 / 192
+        default:
+            maxLong = tileWidthBudget
+        }
+        return min(preferred, maxLong)
+    }
+
+    /// 表示の向きだけを付け替える。画素は並べ替えずに同じ CGImage を包み直す。
     static func reoriented(_ image: UIImage, to orientation: UIImage.Orientation) -> UIImage {
         guard let cgImage = image.cgImage else { return image }
         return UIImage(cgImage: cgImage, scale: image.scale, orientation: orientation)
@@ -140,5 +159,43 @@ enum DepthPreview {
         }
         return image(rgba: rgba(depth: depth, width: width, height: height), width: width, height: height)
             ?? UIImage()
+    }
+
+    /// Simulator のレイアウト確認用。左右非対称なので、誤った回転が一目で分かる。
+    static func demoColorBars() -> UIImage {
+        let width = 256
+        let height = 192
+        let bars: [(UInt8, UInt8, UInt8)] = [
+            (40, 40, 40),
+            (192, 192, 0),
+            (0, 192, 192),
+            (0, 192, 0),
+            (192, 0, 192),
+            (192, 0, 0),
+            (0, 0, 192),
+        ]
+        let stripe = width / bars.count
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let color = bars[min(x / stripe, bars.count - 1)]
+                let offset = (y * width + x) * 4
+                pixels[offset] = color.0
+                pixels[offset + 1] = color.1
+                pixels[offset + 2] = color.2
+            }
+        }
+        // センサ画像の左上。オーバーレイに隠れない大きさにし、90° 回すと別の隅へ移る
+        let triangle = 96
+        for y in 0 ..< triangle {
+            let rowWidth = triangle - y
+            for x in 0 ..< rowWidth {
+                let offset = (y * width + x) * 4
+                pixels[offset] = 255
+                pixels[offset + 1] = 255
+                pixels[offset + 2] = 255
+            }
+        }
+        return image(rgba: pixels, width: width, height: height) ?? UIImage()
     }
 }

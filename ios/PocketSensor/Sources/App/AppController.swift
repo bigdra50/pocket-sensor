@@ -10,7 +10,7 @@ import UIKit
 final class AppController: ObservableObject {
     @Published private(set) var snapshot = SensorSnapshot()
     @Published private(set) var previewVisible = false
-    @Published private(set) var depthPreview: UIImage?
+    @Published private(set) var preview: PreviewPair?
     @Published private(set) var arkitSupported = ARKitCapture.isSupported
     @Published private(set) var serverState = "stopped"
     @Published private(set) var serverPort: UInt16?
@@ -32,6 +32,7 @@ final class AppController: ObservableObject {
     private var statusTimer: Timer?
     private var didStart = false
     private var previewEnabled = false
+    private let previewRenderer = PreviewRenderer()
     private let probeMode = ProcessInfo.processInfo.arguments.contains("-PocketSensorProbe")
     private let demoValues = ProcessInfo.processInfo.arguments.contains("-PocketSensorDemoValues")
     private let demoPreview = ProcessInfo.processInfo.arguments.contains("-PocketSensorDemoPreview")
@@ -58,7 +59,7 @@ final class AppController: ObservableObject {
         if demoPreview {
             previewVisible = true
             previewEnabled = true
-            depthPreview = DepthPreview.demoGradient()
+            preview = PreviewPair(rgb: DepthPreview.demoColorBars(), depth: DepthPreview.demoGradient())
         }
         if probeMode {
             start()
@@ -200,22 +201,26 @@ final class AppController: ObservableObject {
         session?.setMonitorOn(on)
     }
 
-    /// 画面タップ用。ON のあいだだけ ARFrame レートでヒートマップを作る。
+    /// 画面タップ用。ON のあいだだけプレビュー用 queue で RGB と深度の 1 組を作る。
     func togglePreview() {
         previewVisible.toggle()
         previewEnabled = previewVisible
         if !previewVisible {
-            depthPreview = nil
+            preview = nil
         } else if demoPreview {
-            depthPreview = DepthPreview.demoGradient()
+            preview = PreviewPair(rgb: DepthPreview.demoColorBars(), depth: DepthPreview.demoGradient())
         }
     }
 
     private func handleFrame(_ sample: ARFrameSample) {
         let label = ARKitCapture.trackingLabel(sample.trackingState)
-        var preview: UIImage?
         if previewEnabled {
-            preview = sample.depthMap.flatMap { DepthPreview.image(of: $0) }
+            previewRenderer.submit(sample) { pair in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.previewVisible else { return }
+                    self.preview = pair
+                }
+            }
         }
         var updatedCenter = false
         var newCenter: Float?
@@ -233,12 +238,6 @@ final class AppController: ObservableObject {
             latest.cameraTransform = sample.cameraTransform
             if updatedCenter {
                 latest.depthCenterM = newCenter
-            }
-        }
-        if previewEnabled {
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.previewVisible else { return }
-                self.depthPreview = preview
             }
         }
     }

@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// 画面（window scene）の向きを追う。深度プレビューを正立させるのに使う。
+/// 画面（window scene）の向きを追う。RGB-D プレビューを正立させるのに使う。
 ///
 /// 端末の向き（`UIDevice.orientation`）は使わない。回転ロック中や対応外の向きでは画面が回らないので、
 /// 端末の向きに合わせるとヒートマップだけが画面とずれて回る。

@@ -23,6 +23,40 @@ final class DepthPreviewTests: XCTestCase {
         XCTAssertEqual(DepthPreview.frameSize(long: 160, for: .left), CGSize(width: 120, height: 160))
     }
 
+    func testLandscapeTilesAt140Fit288Points() {
+        let size = DepthPreview.frameSize(long: 140, for: .up)
+        XCTAssertEqual(size, CGSize(width: 140, height: 105))
+        XCTAssertEqual(size.width * 2 + 8, 288)
+    }
+
+    func testPortraitTilesAt168Are126By168AndFit260Points() {
+        let size = DepthPreview.frameSize(long: 168, for: .right)
+        XCTAssertEqual(size, CGSize(width: 126, height: 168))
+        XCTAssertEqual(size.width * 2 + 8, 260)
+    }
+
+    func testFittedLongKeepsPreferredWhenWidthIsAmple() {
+        XCTAssertEqual(
+            DepthPreview.fittedLong(preferred: 140, availableWidth: 352, spacing: 8, for: .up),
+            140
+        )
+        XCTAssertEqual(
+            DepthPreview.fittedLong(preferred: 168, availableWidth: 354, spacing: 8, for: .right),
+            168
+        )
+    }
+
+    func testFittedLongShrinksRatherThanOverflowing() {
+        XCTAssertEqual(
+            DepthPreview.fittedLong(preferred: 140, availableWidth: 200, spacing: 8, for: .up),
+            96
+        )
+        XCTAssertEqual(
+            DepthPreview.fittedLong(preferred: 168, availableWidth: 200, spacing: 8, for: .right),
+            128
+        )
+    }
+
     func testReorientedImageSwapsWidthAndHeightOnlyWhenTurnedSideways() {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
@@ -68,4 +102,39 @@ final class DepthPreviewTests: XCTestCase {
         XCTAssertEqual(Int(image.size.height.rounded()), 192)
         XCTAssertNotNil(image.cgImage)
     }
+
+    func testDemoColorBarsIsLidarAspectAndAsymmetric() throws {
+        let image = DepthPreview.demoColorBars()
+        XCTAssertEqual(Int(image.size.width.rounded()), 256)
+        XCTAssertEqual(Int(image.size.height.rounded()), 192)
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let topLeft = try rgbAt(cgImage, x: 2, y: 2)
+        XCTAssertEqual(topLeft.r, 255)
+        XCTAssertEqual(topLeft.g, 255)
+        XCTAssertEqual(topLeft.b, 255)
+        let topRight = try rgbAt(cgImage, x: 250, y: 2)
+        XCTAssertFalse(topRight.r == 255 && topRight.g == 255 && topRight.b == 255)
+        let bottomLeft = try rgbAt(cgImage, x: 2, y: 180)
+        XCTAssertFalse(bottomLeft.r == 255 && bottomLeft.g == 255 && bottomLeft.b == 255)
+    }
+}
+
+/// `CGImage.cropping` の原点は左上。
+private func rgbAt(_ image: CGImage, x: Int, y: Int) throws -> (r: UInt8, g: UInt8, b: UInt8) {
+    let cropped = try XCTUnwrap(image.cropping(to: CGRect(x: x, y: y, width: 1, height: 1)))
+    var pixel = [UInt8](repeating: 0, count: 4)
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    try pixel.withUnsafeMutableBytes { raw in
+        let ctx = try XCTUnwrap(CGContext(
+            data: raw.baseAddress,
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        ctx.draw(cropped, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+    }
+    return (pixel[0], pixel[1], pixel[2])
 }

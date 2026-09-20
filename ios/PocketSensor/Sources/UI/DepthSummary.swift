@@ -49,7 +49,7 @@ enum DepthSummary {
         return centerMedian(depth: depth, confidence: confidence, width: width, height: height, fraction: fraction)
     }
 
-    /// `DepthPreview` からも使う。要約は 1 Hz、プレビュー ON 時は毎フレーム。
+    /// `DepthPreview` からも使う。要約は 1 Hz。プレビューの色付けは別 queue で最大 30 Hz。
     static func floats(from buffer: CVPixelBuffer) -> [Float]? {
         guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_DepthFloat32 else { return nil }
         CVPixelBufferLockBaseAddress(buffer, .readOnly)
