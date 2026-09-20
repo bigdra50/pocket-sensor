@@ -130,6 +130,7 @@ WiFi では最新 1 件を保持する背圧のチャンネルが 1 割ほど捨
 | `origin_epoch` | `uint32` | ARKit の world 原点を作り直すたびに増える数 |
 
 `origin_epoch` が変わったら、受け手は前の姿勢と連続していないものとして扱う。
+原点を作り直すのは、`reset_origin` が呼ばれたときと、止まっていた ARKit が動き直すときである。
 `state` が 0 のあいだは、`odom` と `/tf` を流さない。
 `odom` の `pose.covariance` には、`state` に応じた対角の値を入れる。
 値は台車の上での測定を経て決めるので、それまでは 0（不明）にしておく。
@@ -205,23 +206,25 @@ IMU への変換がこれに当たる。
 ### diagnostics の中身
 
 `/diagnostics` は、受け手が端末の画面を見ずに状態を知るためのチャンネルである。
-データが届かない理由（追跡の喪失、熱によるレートの低下、背圧による破棄、位置情報の許可の不足）を、ここで判別できるようにする。
+データが届かない理由（追跡の喪失、熱によるレートの低下、背圧による破棄、位置情報の許可の不足、センサーの停止）を、ここで判別できるようにする。
 1 Hz で、次の status を 1 つの `DiagnosticArray` にまとめて流す。
 `hardware_id` には端末の名前を入れる。
 
 | `name` | `level` | `values` |
 | --- | --- | --- |
-| `pocketsensor/tracking` | 正常は OK、制限ありは WARN、利用不可は ERROR | `state`、`reason`（`TrackingStatus` と同じ数値） |
+| `pocketsensor/tracking` | 正常は OK、制限ありは WARN、利用不可は ERROR。ARKit を止めているあいだは OK とし、`message` を `stopped` にする | `state`、`reason`（`TrackingStatus` と同じ数値） |
 | `pocketsensor/thermal` | nominal と fair は OK、serious は WARN、critical は ERROR | `level` |
 | `pocketsensor/streams` | 破棄が 1 件でもあれば WARN | `clients`、`rate.<key>`（送った実績の Hz）、`drops.<key>`（背圧で捨てた数）、`encode_skips.<key>`（符号化が間に合わず飛ばした数） |
 | `pocketsensor/clock` | 自己点検が suspicious なら ERROR | `self_check`（[time.md](time.md) を参照） |
 | `pocketsensor/mag` | high と medium は OK、low と unknown は WARN、未較正は ERROR | `calibration` |
 | `pocketsensor/gnss` | authorized は OK、not_determined は WARN、denied と restricted は ERROR | `authorization` |
+| `pocketsensor/sensors` | 常に OK | `arkit`、`depth`、`motion`、`altimeter`、`battery`、`gnss`。値は、そのセンサー群が動いていれば `on`、止まっていれば `off` |
 
 `<key>` は、チャンネルの表（`contract/channels.toml`）の key である。
 `message` には、その status の要約（`values` の主な値と同じ文字列）を入れる。
 
-位置情報の許可を端末の画面で求めるのは、GNSS のチャンネルが最初に購読された時点である。
+位置情報の許可は、測位が初めて必要になった時点で、端末の画面で求める。
+GNSS のチャンネルの最初の購読か、アプリの設定での GNSS の表示の ON が、そのきっかけになる。
 許可されるまで `gnss/fix` は届かないので、受け手は `pocketsensor/gnss` の `authorization` で理由を知る。
 
 ### 次の段階で足すチャンネル
@@ -232,6 +235,21 @@ IMU への変換がこれに当たる。
 | `/<name>/imu/mag_raw` | `sensor_msgs/msg/MagneticField` | 端末自身の磁気の偏りを含む生値 |
 | `/<name>/gnss/vel` | `geometry_msgs/msg/TwistStamped` | 対地速度。ENU で表す |
 | `/<name>/audio` | 未定 | マイク |
+
+## 購読とセンサーの起動
+
+端末は、購読されたチャンネルに要るセンサーだけを動かす。
+受け手は、使うチャンネルだけを購読する。
+深度を購読しなければ LiDAR は動かず、姿勢、RGB、深度のどれも購読しなければ ARKit も動かない。
+アプリの画面が表示のためにセンサーを動かしていることもあるが、受け手の購読には影響しない。
+条件の全体は [architecture.md](architecture.md) の「センサーを動かす条件」にある。
+
+止まっているセンサーのチャンネルを購読すると、最初のメッセージまでに時間がかかる。
+ARKit は、最初のフレームまでに 1 秒ほど、追跡が正常になるまでに 4 秒ほどかかる。
+購読が無くなっても、センサーは 10 秒のあいだ動かし続ける。
+
+ARKit が動き直すと、world の原点は作り直され、`origin_epoch` が増える。
+姿勢の連続性が要る受け手は、`odom` か `/tf` を購読したままにする。
 
 ## parameters
 
