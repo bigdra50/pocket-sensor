@@ -223,7 +223,8 @@ def test_check_axes_happy_path_against_scripted_fake_device(tmp_path: Path, caps
         fake.script_motion(position=(0.0, 0.0, 0.0), imu_accel=(g, 0.0, 0.0))
         director = _CheckAxesDirector(fake)
         code = main(
-            ["check-axes", fake.url, "--json", str(out), "--step-seconds", "0.35", "--min-move", "0.15"],
+            # 動きは 0.2 秒で終わる。測る窓を 1 秒にして、負荷で配送が遅れても窓の中に収まるようにする。
+            ["check-axes", fake.url, "--json", str(out), "--step-seconds", "1.0", "--min-move", "0.15"],
             sleep=director,
         )
     assert code == 0
@@ -231,3 +232,50 @@ def test_check_axes_happy_path_against_scripted_fake_device(tmp_path: Path, caps
     assert "PASS" in printed
     payload = json.loads(out.read_text())
     assert [step["status"] for step in payload["steps"]] == ["PASS"] * 6
+
+
+def _wall_anchor() -> tuple[list[float], list[float]]:
+    # 擬似デバイスは原点のまわりの半径 1 m の円の上にいる。x = 3 m の壁に、表を原点の側へ向けて貼った画像。
+    # anchor の x（画像の上）は世界の上、z（法線）は -x。
+    from pocketsensor.frames import matrix_to_quat
+
+    # 列が anchor の x、y、z。y は z × x で、世界の +y（画像の左）になる。
+    rotation = [[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]
+    return [3.0, 0.0, 0.0], [float(v) for v in matrix_to_quat(rotation)]
+
+
+def test_check_anchor_passes_for_an_image_on_a_wall(tmp_path: Path) -> None:
+    out = tmp_path / "anchor.json"
+    lines: list[str] = []
+    with FakeDevice(port=0, seed=0) as fake:
+        fake.anchors = {"marker_a": _wall_anchor()}
+        code = main(["check-anchor", fake.url, "--timeout", "5", "--json", str(out)], printer=lines.append)
+    assert code == 0, lines
+    assert any(line.startswith("PASS  anchor  marker_a") for line in lines)
+    report = json.loads(out.read_text())
+    assert report["anchors"][0]["image"] == "marker_a"
+    assert report["anchors"][0]["status"] == "PASS"
+    assert 1.9 <= report["anchors"][0]["measured"]["distance_m"] <= 4.1
+
+
+def test_check_anchor_fails_when_the_normal_points_into_the_wall(tmp_path: Path) -> None:
+    position, _ = _wall_anchor()
+    lines: list[str] = []
+    with FakeDevice(port=0, seed=0) as fake:
+        # 単位四元数だと、法線（z）が世界の上を向く。壁に貼った画像としては誤り。
+        fake.anchors = {"marker_a": (position, [0.0, 0.0, 0.0, 1.0])}
+        code = main(["check-anchor", fake.url, "--timeout", "5"], printer=lines.append)
+    assert code == 1
+    assert any(line.startswith("FAIL  anchor  marker_a") for line in lines)
+
+
+def test_check_anchor_times_out_without_an_image() -> None:
+    lines: list[str] = []
+    with FakeDevice(port=0, seed=0) as fake:
+        code = main(["check-anchor", fake.url, "--timeout", "1"], printer=lines.append)
+    assert code == 1
+    assert any("no reference image" in line for line in lines)
+
+
+def test_check_anchor_rejects_an_unknown_pose() -> None:
+    assert main(["check-anchor", "ws://127.0.0.1:9", "--pose", "diagonal"]) == 2

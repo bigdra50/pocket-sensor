@@ -228,9 +228,13 @@ LiDAR の無い機種では、深度と confidence が一覧に現れない。
 | `pocketsensor record <source> -o run.mcap` | MCAP へ記録する |
 | `pocketsensor echo <source> <topic>` | 1 つのトピックを復号して表示する |
 | `pocketsensor check-axes <source>` | 端末を決まった向きへ動かしてもらい、座標軸と符号が約束どおりかを判定する |
+| `pocketsensor check-anchor <source>` | 参照画像を映してもらい、anchor の frame の軸の向きと、端末からの距離を判定する |
 
 `check-axes` は、端末を取り付けたあとの確認に使う。
 指示に従って端末を前、左、上へ動かし、上から見て反時計回りに回すと、`odom` の位置、yaw の符号、IMU の比力の符号を判定して結果を表示する。
+
+`check-anchor` は、参照画像の置き方（`--pose vertical` は壁や画面、`--pose horizontal` は机や床）を受け取る。
+端末が画像の表の側にいること（anchor の z が正）と、画像の上（anchor の x）か法線（anchor の z）が重力の逆を向くことを確かめる。
 
 ## 依存
 

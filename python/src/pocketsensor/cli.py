@@ -14,7 +14,9 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from pocketsensor.anchor_check import IMAGE_POSES, judge_anchor
 from pocketsensor.axes_check import (
+    STATUS_PASS,
     StepVerdict,
     judge_push,
     judge_still,
@@ -26,7 +28,7 @@ from pocketsensor.device import open
 from pocketsensor.discovery import discover
 from pocketsensor.errors import PocketSensorError
 from pocketsensor.playback import is_recording_source
-from pocketsensor.streams import Battery, Color, Depth, Gnss, Imu, Mag, Pose, Pressure, Stream
+from pocketsensor.streams import Anchors, Battery, Color, Depth, Gnss, Imu, Mag, Pose, Pressure, Stream
 from pocketsensor.types import TrackingState
 
 _STREAM_FACTORIES = {
@@ -103,6 +105,16 @@ def _build_parser() -> argparse.ArgumentParser:
     check_p.add_argument("--step-seconds", type=float, default=4.0)
     check_p.add_argument("--min-move", type=float, default=0.15)
     check_p.set_defaults(func=_cmd_check_axes)
+
+    anchor_p = sub.add_parser(
+        "check-anchor",
+        help="show a reference image to the camera and check the axes of its anchor frame",
+    )
+    anchor_p.add_argument("source")
+    anchor_p.add_argument("--pose", choices=IMAGE_POSES, default="vertical", help="how the image is placed")
+    anchor_p.add_argument("--timeout", type=float, default=30.0, metavar="S")
+    anchor_p.add_argument("--json", dest="json_out", metavar="PATH")
+    anchor_p.set_defaults(func=_cmd_check_anchor)
     return parser
 
 
@@ -238,6 +250,66 @@ _CHECK_STEPS: tuple[tuple[str, str], ...] = (
     ),
     ("push", "Push the phone quickly forward (camera direction) and stop."),
 )
+
+
+def _cmd_check_anchor(args: argparse.Namespace) -> int:
+    """参照画像を映してもらい、届いた anchor ごとに軸の向きを判定する。"""
+    timeout = float(args.timeout)
+    if timeout <= 0.0:
+        print("timeout must be positive", file=sys.stderr)
+        return 2
+    clock: Callable[[], float] = args._clock
+    sleep: Callable[[float], None] = args._sleep
+    printer: Callable[[str], None] = args._printer
+    config = Config(streams=(Pose(), Anchors()), open_timeout=5.0)
+    started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # 端末は anchor を、姿勢を送る回にだけ載せる。同じ時刻の姿勢が必ずあるので、時刻で組にする。
+    poses: dict[int, Any] = {}
+    results: dict[str, StepVerdict] = {}
+    with _open(args.source, config) as dev:
+        info = dev.info
+        printer(f"Point the rear camera at a reference image ({args.pose}). Waiting up to {timeout:g} s.")
+        deadline = clock() + timeout
+        while clock() < deadline:
+            try:
+                frames = dev.wait_for_frames(timeout=0.2)
+            except TimeoutError:
+                frames = None
+            if frames is not None and frames.pose is not None:
+                poses[frames.t_device_ns] = frames.pose
+                for stamp in sorted(poses)[:-120]:
+                    del poses[stamp]
+            for name, anchor in dev.anchors.latest().items():
+                pose = poses.get(anchor.t_device_ns)
+                if pose is None or name in results:
+                    continue
+                results[name] = judge_anchor(
+                    anchor.position, anchor.orientation_xyzw, pose.position, image_pose=args.pose
+                )
+            if results:
+                # 1 枚見つかったあとも少しだけ待ち、同時に映っているほかの画像も拾う。
+                deadline = min(deadline, clock() + 1.0)
+            sleep(0.02)
+    for name, verdict in sorted(results.items()):
+        measured = verdict.measured
+        position = ", ".join(f"{v:+.2f}" for v in measured["camera_in_anchor_m"])
+        line = (
+            f"{verdict.status}  anchor  {name}  distance_m={measured['distance_m']:.2f}  "
+            f"camera_in_anchor_m=({position})  up_angle_deg={measured['up_angle_deg']:.1f}"
+        )
+        printer(f"{line}  {verdict.reason}".rstrip())
+    if not results:
+        printer("FAIL  no reference image was tracked. Is it registered in the app, flat, and well lit?")
+    if args.json_out:
+        report = {
+            "device": info.model,
+            "app_version": info.app_version,
+            "session_id": info.session_id,
+            "started_at": started_at,
+            "anchors": [{"image": name, **verdict.to_json()} for name, verdict in sorted(results.items())],
+        }
+        Path(args.json_out).write_text(json.dumps(report, indent=1) + "\n")
+    return 0 if results and all(v.status == STATUS_PASS for v in results.values()) else 1
 
 
 def _cmd_check_axes(args: argparse.Namespace) -> int:

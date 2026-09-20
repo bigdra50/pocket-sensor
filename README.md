@@ -86,6 +86,8 @@ with ps.open("ws://iphone.local:8765", config) as dev:    # "usb:" も "run.mcap
 | Lichtblick や Foxglove で表示する | 接続の種類に Foxglove WebSocket を選び、`ws://iphone.local:8765` を開く |
 | OpenCV や Rerun で表示する | [examples/](examples/README.md) |
 | ROS 2 のトピックへ流す | [ros2/pocketsensor_ros/](ros2/pocketsensor_ros/README.md) |
+| 取り付けたあとに軸の向きを確かめる | `pocketsensor check-axes usb:` の指示に従って端末を動かす |
+| 参照画像で原点を固定する | `tools/show_marker.html` の目印を印刷するか画面へ出し、`pocketsensor check-anchor usb:` で確かめる |
 | iPhone 無しで試す | `mise run sim` で擬似デバイスを起動し、`ws://127.0.0.1:8765` を開く |
 
 ## Development
