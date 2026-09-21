@@ -65,7 +65,22 @@ _GNSS_TIME_REF_KEPT = 8
 log = logging.getLogger("pocketsensor.device")
 
 _MESSAGES_CAP = 10000
+# 閉じる途中で待たせない。端末の応答は LAN で数 ms
+_RESTORE_TIMEOUT_S = 1.0
 RawTap = Callable[[ChannelInfo, int, bytes], None]
+
+
+def _same_value(a: Any, b: Any) -> bool:
+    """端末は 15 と 15.0 のどちらでも返すので、数値は float で比べる。"""
+    numeric = (int, float)
+    if (
+        isinstance(a, numeric)
+        and isinstance(b, numeric)
+        and not isinstance(a, bool)
+        and not isinstance(b, bool)
+    ):
+        return float(a) == float(b)
+    return bool(a == b)
 
 
 @dataclass
@@ -184,6 +199,8 @@ class Device:
         self._raw_taps: list[RawTap] = []
         self._latched_raw: dict[str, tuple[ChannelInfo, int, bytes]] = {}
         self._recorder: Any = None
+        # 設定名から (開く前の値, 自分が入れた値)
+        self._restore_on_close: dict[str, tuple[Any, Any]] = {}
         self.imu = _Drain(self, self._imu)
         self.imu_raw = _Drain(self, self._imu_raw)
         self.mag = _Drain(self, self._mag)
@@ -245,7 +262,13 @@ class Device:
             params.update(spec.parameters())
         if params:
             remaining = max(0.0, deadline - time.monotonic())
-            self._client.set_parameters(params, timeout=remaining)
+            previous = self._client.get_parameters(list(params), timeout=remaining)
+            applied = self._client.set_parameters(params, timeout=remaining)
+            self._restore_on_close = {
+                name: (previous[name], value)
+                for name, value in applied.items()
+                if name in previous and not _same_value(previous[name], value)
+            }
         wanted_cam = self._wanted_camera_info()
         while time.monotonic() < deadline:
             if self._dead:
@@ -298,8 +321,27 @@ class Device:
             rec.stop()
         self._clock_stop.set()
         if self._client is not None:
+            self._restore_parameters()
             self._client.close()
         self._on_disconnect()
+
+    def _restore_parameters(self) -> None:
+        """Config で変えた設定を戻す。設定は端末に 1 つで、戻さないと次の接続へ残る。"""
+        pending, self._restore_on_close = self._restore_on_close, {}
+        if not pending or self._dead or self._client is None:
+            return
+        try:
+            current = self._client.get_parameters(list(pending), timeout=_RESTORE_TIMEOUT_S)
+            # ほかの接続か set_rate が変えた値は、その意図を優先して触らない
+            back = {
+                name: before
+                for name, (before, applied) in pending.items()
+                if name in current and _same_value(current[name], applied)
+            }
+            if back:
+                self._client.set_parameters(back, timeout=_RESTORE_TIMEOUT_S)
+        except (ConnectionLost, TimeoutError, OSError):
+            return
 
     @property
     def info(self) -> DeviceInfo:

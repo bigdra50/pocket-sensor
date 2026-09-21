@@ -60,6 +60,11 @@ Bonjour の探索には、extra の `discovery`（zeroconf）が要る。
 開いたあとの変更は、端末の parameters を書き換える。
 設定は端末に 1 つなので、ほかの接続にも反映される。
 
+`ps.Depth(rate=5)` のようにストリームへ渡した値も、端末の parameters を書き換える。
+この値は、`Device` を閉じるときに、開く前の値へ戻る。
+開いているあいだにほかの接続が同じ項目を変えていたら、戻さない。
+`dev.set_rate` などで変えた値は、閉じたあとも端末に残る。
+
 ## フレームセット
 
 `dev.wait_for_frames(timeout)` は、同じ ARFrame から作られたデータをまとめたフレームセット（`FrameSet`）を返す。

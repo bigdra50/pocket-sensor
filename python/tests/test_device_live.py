@@ -7,8 +7,10 @@ import numpy as np
 import pytest
 
 import pocketsensor as ps
+from pocketsensor.client import FoxgloveClient
 from pocketsensor.streams import Stream
 from pocketsensor.testing.fake_device import FakeDevice
+from pocketsensor.transport import connect
 
 
 def _live_config(**kwargs) -> ps.Config:
@@ -99,6 +101,44 @@ def test_set_rate_changes_observed_rate() -> None:
             assert fast > 0
             assert slow < fast
             assert slow <= 8
+
+
+def _device_parameters(url: str, names: list[str]) -> dict[str, float]:
+    client = FoxgloveClient(connect(url, timeout=2.0))
+    try:
+        client.wait_ready(timeout=2.0)
+        return {k: float(v) for k, v in client.get_parameters(names, timeout=2.0).items()}
+    finally:
+        client.close()
+
+
+def test_close_puts_back_the_rates_given_in_config() -> None:
+    with FakeDevice(port=0, seed=0) as fake:
+        cfg = ps.Config(streams=(ps.Pose(rate=10), ps.Depth(rate=2)), open_timeout=5.0)
+        with ps.open(fake.url, cfg):
+            during = _device_parameters(fake.url, ["pose.rate", "depth.rate"])
+        after = _device_parameters(fake.url, ["pose.rate", "depth.rate"])
+    assert during == {"pose.rate": 10.0, "depth.rate": 2.0}
+    assert after == {"pose.rate": 30.0, "depth.rate": 15.0}
+
+
+def test_close_keeps_a_rate_that_another_client_changed_meanwhile() -> None:
+    with FakeDevice(port=0, seed=0) as fake:
+        cfg = ps.Config(streams=(ps.Pose(), ps.Depth(rate=2)), open_timeout=5.0)
+        with ps.open(fake.url, cfg):
+            with ps.open(fake.url, ps.Config(streams=(ps.Pose(),), open_timeout=5.0)) as other:
+                other.set_rate(Stream.DEPTH, 5.0)
+        after = _device_parameters(fake.url, ["depth.rate"])
+    assert after == {"depth.rate": 5.0}
+
+
+def test_close_keeps_a_rate_changed_with_set_rate() -> None:
+    with FakeDevice(port=0, seed=0) as fake:
+        cfg = ps.Config(streams=(ps.Pose(), ps.Depth()), open_timeout=5.0)
+        with ps.open(fake.url, cfg) as dev:
+            dev.set_rate(Stream.DEPTH, 5.0)
+        after = _device_parameters(fake.url, ["depth.rate"])
+    assert after == {"depth.rate": 5.0}
 
 
 def test_unsupported_missing_channel() -> None:
