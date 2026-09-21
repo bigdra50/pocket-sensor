@@ -69,7 +69,7 @@ with ps.open("ws://iphone.local:8765", config) as dev:   # "usb:" も "run.mcap"
 | `pose` | `<name>_odom` から見た `<name>_link` の位置と姿勢 |
 | `tracking` | トラッキングの状態、理由、`origin_epoch` |
 | `timestamp(domain)` | 計測時刻。種類は下の「時刻」を参照 |
-| `latency` | 計測から到着までの遅延の推定値 |
+| `latency_ns` | 計測から到着までの遅延の推定値（ns）。時刻同期が済むまでは例外を返す |
 
 深度と confidence は、端末が対応していれば、PNG で可逆圧縮したチャンネルから受け取る。
 `ps.Depth(compressed=False)` を渡すと、無圧縮のチャンネルを使う。
