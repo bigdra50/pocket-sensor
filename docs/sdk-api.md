@@ -33,6 +33,9 @@ with ps.open("ws://iphone.local:8765", config) as dev:   # "usb:" も "run.mcap"
 | `ps.discover(timeout)` | 見つかった端末の一覧を返す。Bonjour と、USB でつながった端末の両方を探す |
 | `ps.open(source, config)` | 端末か記録ファイルを開き、`Device` を返す |
 
+Bonjour の探索には、extra の `discovery`（zeroconf）が要る。
+入っていなければ、USB でつながった端末だけを返す。
+
 `source` には次の 3 つの形を渡せる。
 
 | 形 | 例 | 内容 |

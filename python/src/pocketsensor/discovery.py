@@ -6,6 +6,7 @@ import logging
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from importlib.util import find_spec
 
 from pocketsensor.usbmux import UsbDevice, UsbmuxError, UsbmuxUnavailable, list_devices
 
@@ -47,6 +48,11 @@ def device_from_usb(device: UsbDevice, port: int = _DEFAULT_PORT) -> DiscoveredD
         udid=device.udid,
         port=int(port),
     )
+
+
+def bonjour_available() -> bool:
+    """zeroconf（extra の discovery）が入っていれば True。無いと、Bonjour の探索は何も返さない。"""
+    return find_spec("zeroconf") is not None
 
 
 def merge_devices(

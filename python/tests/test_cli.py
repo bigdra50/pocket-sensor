@@ -54,6 +54,23 @@ def test_cli_unknown_command_is_usage() -> None:
     assert main(["nope"]) == 2
 
 
+def test_discover_without_zeroconf_says_bonjour_was_skipped(capsys, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pocketsensor.cli.discover", lambda timeout=2.0: [])
+    monkeypatch.setattr("pocketsensor.cli.bonjour_available", lambda: False)
+    assert main(["discover", "--timeout", "0.1"]) == 0
+    actual = capsys.readouterr()
+    assert actual.out == ""
+    assert "zeroconf" in actual.err
+    assert "pocketsensor[discovery]" in actual.err
+
+
+def test_discover_with_zeroconf_prints_no_hint(capsys, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pocketsensor.cli.discover", lambda timeout=2.0: [])
+    monkeypatch.setattr("pocketsensor.cli.bonjour_available", lambda: True)
+    assert main(["discover", "--timeout", "0.1"]) == 0
+    assert capsys.readouterr().err == ""
+
+
 def test_discover_prints_stub_devices(capsys, monkeypatch: pytest.MonkeyPatch) -> None:
     devices = [
         DiscoveredDevice("wifi-phone", "ws://10.0.0.1:8765", "wifi", "10.0.0.1", None, 8765),

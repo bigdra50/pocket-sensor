@@ -25,7 +25,7 @@ from pocketsensor.axes_check import (
 )
 from pocketsensor.config import Config
 from pocketsensor.device import open
-from pocketsensor.discovery import discover
+from pocketsensor.discovery import bonjour_available, discover
 from pocketsensor.errors import PocketSensorError
 from pocketsensor.playback import is_recording_source
 from pocketsensor.streams import Anchors, Battery, Color, Depth, Gnss, Imu, Mag, Pose, Pressure, Stream
@@ -143,6 +143,13 @@ def _open(source: str, config: Config):
 
 
 def _cmd_discover(args: argparse.Namespace) -> int:
+    if not bonjour_available():
+        # 黙って飛ばすと、端末が同じ LAN にいても「見つからない」としか分からない
+        print(
+            "Bonjour discovery is skipped because zeroconf is not installed. "
+            "Install the extra: pocketsensor[discovery]. Only USB devices are listed.",
+            file=sys.stderr,
+        )
     devices = discover(timeout=args.timeout)
     for item in devices:
         print(f"{item.transport}\t{item.name}\t{item.source}")

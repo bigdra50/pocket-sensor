@@ -5,7 +5,13 @@ import logging
 import pytest
 
 import pocketsensor as ps
-from pocketsensor.discovery import DiscoveredDevice, device_from_bonjour, device_from_usb, merge_devices
+from pocketsensor.discovery import (
+    DiscoveredDevice,
+    bonjour_available,
+    device_from_bonjour,
+    device_from_usb,
+    merge_devices,
+)
 from pocketsensor.usbmux import UsbDevice, UsbmuxUnavailable
 
 
@@ -65,3 +71,11 @@ def test_discover_missing_usbmuxd_is_not_an_error(caplog: pytest.LogCaptureFixtu
 
     found = ps.discover(timeout=0.01, bonjour_browser=lambda _t: [], usb_lister=boom)
     assert found == []
+
+
+@pytest.mark.parametrize(("spec", "expected"), [(None, False), (object(), True)])
+def test_bonjour_available_follows_the_zeroconf_import(
+    monkeypatch: pytest.MonkeyPatch, spec: object, expected: bool
+) -> None:
+    monkeypatch.setattr("pocketsensor.discovery.find_spec", lambda name: spec)
+    assert bonjour_available() is expected
