@@ -1,17 +1,19 @@
+**English** | [日本語](README.ja.md)
+
 # pocketsensor
 
-iPhone をロボットや PC のセンサーとして使うための、iOS アプリと Python SDK。
-LiDAR の深度、カメラ、自己位置、IMU、GNSS を、WiFi か USB で配信する。
-データは ROS 2 標準のメッセージ型で流れるので、Lichtblick、rosbag2、ROS 2 のノードがそのまま使える。
+An iOS app and a Python SDK that use an iPhone as a sensor for a robot or a PC.
+They stream LiDAR depth, the camera, pose, IMU, and GNSS over Wi-Fi or USB.
+The data uses standard ROS 2 message types, so Lichtblick, rosbag2, and ROS 2 nodes work unchanged.
 
-![姿勢の値と RGB-D のプレビューが並ぶアプリの画面](docs/images/app.gif)
+![App screen with pose values next to an RGB-D preview](docs/images/app.gif)
 
 ## Requirements
 
-- LiDAR 付きの iPhone（iOS 17 以降）
-- Xcode と [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-- Python 3.10 以降と [uv](https://docs.astral.sh/uv/)
-- [mise](https://mise.jdx.dev/) と Docker（Lichtblick の起動と ROS 2 での確認に使う）
+- An iPhone with LiDAR (iOS 17 or later)
+- Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+- Python 3.10 or later and [uv](https://docs.astral.sh/uv/)
+- [mise](https://mise.jdx.dev/) and Docker (used to launch Lichtblick and to check ROS 2)
 
 ## Installation
 
@@ -19,31 +21,31 @@ LiDAR の深度、カメラ、自己位置、IMU、GNSS を、WiFi か USB で�
 
 ```
 cd ios/PocketSensor
-echo 'DEVELOPMENT_TEAM = <自分の Team ID>' > Local.xcconfig
+echo 'DEVELOPMENT_TEAM = <your Team ID>' > Local.xcconfig
 xcodegen generate && open PocketSensor.xcodeproj
 ```
 
-Xcode で実機を選んで Run する。
+In Xcode, select a physical device and run the app.
 
 ### Python SDK
 
 ```
-uv add --editable <このリポジトリ>/python --extra discovery
+uv add --editable <this repository>/python --extra discovery
 ```
 
 ## Usage
 
-アプリは、フォアグラウンドにあるあいだ `ws://<iPhone の名前>.local:8765` で待ち受ける。
-SDK とコマンドでは、USB でつないだ端末を `usb:` で開ける。
+While the app is in the foreground, it listens at `ws://<iPhone name>.local:8765`.
+The SDK and the commands can open a device connected over USB with `usb:`.
 
 ### Visualization
 
 ```
-SOURCE=ws://<iPhone の名前>.local:8765 mise run view:lichtblick
+SOURCE=ws://<iPhone name>.local:8765 mise run view:lichtblick
 ```
 
-出てきた URL を開くと、3D、RGB、深度が並ぶ。
-手元の Lichtblick や Foxglove では、接続の種類に Foxglove WebSocket を選んで同じアドレスを開く。
+Open the URL that is printed. It shows 3D, RGB, and depth side by side.
+In a local Lichtblick or Foxglove, choose Foxglove WebSocket as the connection type and open the same address.
 
 ### Python
 
@@ -51,26 +53,26 @@ SOURCE=ws://<iPhone の名前>.local:8765 mise run view:lichtblick
 import pocketsensor as ps
 
 config = ps.Config(streams=[ps.Color(), ps.Depth(), ps.Pose(), ps.Imu()])
-with ps.open("ws://iphone.local:8765", config) as dev:   # "usb:" も "run.mcap" も同じ
+with ps.open("ws://iphone.local:8765", config) as dev:   # "usb:" and "run.mcap" work the same way
     frames = dev.wait_for_frames()
-    depth_m = frames.depth.meters      # float32、無効は NaN
-    pose = frames.pose                 # REP-103、odom から link
-    imu = dev.imu.read_all()           # 前回からの全サンプル
+    depth_m = frames.depth.meters      # float32; invalid values are NaN
+    pose = frames.pose                 # REP-103, from odom to link
+    imu = dev.imu.read_all()           # every sample since the previous call
 ```
 
 ### CLI
 
 ```
-pocketsensor discover                          # 端末を探す
-pocketsensor info   ws://iphone.local:8765     # 端末の情報、キャリブレーション、時刻同期
+pocketsensor discover                          # find devices
+pocketsensor info   ws://iphone.local:8765     # device info, calibration, and clock sync
 pocketsensor record ws://iphone.local:8765 -o run.mcap
 pocketsensor echo   run.mcap /pocketsensor/odom
-pocketsensor check-axes   usb:                 # 取り付けたあとに、軸の向きを確かめる
-pocketsensor check-anchor usb:                 # 参照画像の anchor を確かめる
+pocketsensor check-axes   usb:                 # after mounting, check the axis directions
+pocketsensor check-anchor usb:                 # check the anchor of a reference image
 ```
 
-記録した MCAP は、`ros2 bag play` と Lichtblick でも開ける。
-OpenCV と Rerun で表示する例は [examples/](examples/README.md) にある。
+A recorded MCAP also opens in `ros2 bag play` and Lichtblick.
+Examples that display the stream with OpenCV and Rerun are in [examples/](examples/README.en.md).
 
 ### ROS 2
 
@@ -78,47 +80,47 @@ OpenCV と Rerun で表示する例は [examples/](examples/README.md) にある
 ros2 launch pocketsensor_ros relay.launch.py source:=ws://iphone.local:8765
 ```
 
-ビルドとパラメータは [ros2/pocketsensor_ros/](ros2/pocketsensor_ros/README.md) にある。
+The build and parameters are described in [ros2/pocketsensor_ros/](ros2/pocketsensor_ros/README.en.md).
 
 ## Topics
 
-| データ | トピック | 形式 | 既定のレート |
+| Data | Topic | Format | Default rate |
 | --- | --- | --- | --- |
-| 自己位置（ARKit） | `/<name>/odom`、`/tf` | `nav_msgs/Odometry` | 30 Hz |
-| RGB | `/<name>/color/image/compressed` | JPEG、960×720 | 15 Hz |
-| LiDAR の深度 | `/<name>/depth/image`、`.../compressedDepth` | `16UC1` の mm、256×192。無圧縮と PNG | 15 Hz |
-| 深度の confidence | `/<name>/depth/confidence`、`.../compressed` | `mono8`。無圧縮と PNG | 15 Hz |
-| IMU | `/<name>/imu/data`、`/<name>/imu/data_raw` | `sensor_msgs/Imu` | 100 Hz |
-| 地磁気 | `/<name>/imu/mag` | `sensor_msgs/MagneticField` | 50 Hz |
-| 気圧 | `/<name>/pressure` | `sensor_msgs/FluidPressure` | 約 1 Hz |
-| GNSS | `/<name>/gnss/fix` | `sensor_msgs/NavSatFix` | 約 1 Hz |
-| 電池と診断 | `/<name>/battery`、`/diagnostics` | `BatteryState`、`DiagnosticArray` | 1 Hz |
-| 参照画像の anchor | `/tf` | 印刷した目印の位置と向き | 30 Hz |
+| Pose (ARKit) | `/<name>/odom`, `/tf` | `nav_msgs/Odometry` | 30 Hz |
+| RGB | `/<name>/color/image/compressed` | JPEG, 960×720 | 15 Hz |
+| LiDAR depth | `/<name>/depth/image`, `.../compressedDepth` | `16UC1` millimeters, 256×192. Uncompressed and PNG | 15 Hz |
+| Depth confidence | `/<name>/depth/confidence`, `.../compressed` | `mono8`. Uncompressed and PNG | 15 Hz |
+| IMU | `/<name>/imu/data`, `/<name>/imu/data_raw` | `sensor_msgs/Imu` | 100 Hz |
+| Magnetometer | `/<name>/imu/mag` | `sensor_msgs/MagneticField` | 50 Hz |
+| Pressure | `/<name>/pressure` | `sensor_msgs/FluidPressure` | about 1 Hz |
+| GNSS | `/<name>/gnss/fix` | `sensor_msgs/NavSatFix` | about 1 Hz |
+| Battery and diagnostics | `/<name>/battery`, `/diagnostics` | `BatteryState`, `DiagnosticArray` | 1 Hz |
+| Reference-image anchor | `/tf` | Position and orientation of a printed marker | 30 Hz |
 
-- 座標は REP-103、単位は SI、時刻は端末が計測した時刻
-- センサーは、購読されているあいだだけ動く
-- `<name>` は端末の名前で、既定は `pocketsensor`
+- Coordinates follow REP-103, units are SI, and timestamps are the times the device measured
+- A sensor runs only while it is subscribed
+- `<name>` is the device name. The default is `pocketsensor`
 
 ## Development
 
 ```
-mise run test        # Python、Swift、E2E
-mise run test:ios    # アプリの単体テスト（シミュレーター）
-mise run test:ros2   # ROS 2 のコンテナでの確認（Docker）
-mise run sim         # iPhone 無しで試すための擬似デバイス
+mise run test        # Python, Swift, and E2E
+mise run test:ios    # app unit tests (simulator)
+mise run test:ros2   # checks in a ROS 2 container (Docker)
+mise run sim         # a fake device for trying the stack without an iPhone
 ```
 
-メッセージの型とチャンネルの正本は `contract/` にある。
-Swift と Python のコードは、そこから生成する。
+The source of truth for message types and channels is `contract/`.
+Swift and Python code is generated from it.
 
 ## Documentation
 
-| 内容 | 文書 |
+| Topic | Document |
 | --- | --- |
-| 接続、チャンネル、設定、サービス | [docs/protocol.md](docs/protocol.md) |
-| 座標系と単位 | [docs/frames-and-units.md](docs/frames-and-units.md) |
-| タイムスタンプと時刻同期 | [docs/time.md](docs/time.md) |
-| SDK の API | [docs/sdk-api.md](docs/sdk-api.md) |
+| Connection, channels, settings, and services | [docs/en/protocol.md](docs/en/protocol.md) |
+| Coordinate frames and units | [docs/en/frames-and-units.md](docs/en/frames-and-units.md) |
+| Timestamps and clock synchronization | [docs/en/time.md](docs/en/time.md) |
+| SDK API | [docs/en/sdk-api.md](docs/en/sdk-api.md) |
 
 ## License
 

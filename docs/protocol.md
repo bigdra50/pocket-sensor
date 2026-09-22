@@ -1,3 +1,5 @@
+[English](en/protocol.md) | **日本語**
+
 # プロトコル
 
 iPhone のアプリは、Foxglove WebSocket プロトコル v1 と互換のサーバーとして動く。

@@ -1,3 +1,5 @@
+[English](README.en.md) | **日本語**
+
 # foxglove-client-check
 
 pocketsensor のサーバーを、可視化ツール側の実装で確かめる検査である。

@@ -1,3 +1,5 @@
+[English](README.en.md) | **日本語**
+
 # contract
 
 pocketsensor が配信するメッセージの定義を、機械可読な形で置く。
